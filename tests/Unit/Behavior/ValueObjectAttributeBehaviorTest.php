@@ -39,6 +39,7 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Throwable;
+use yii\base\Behavior;
 use yii\base\Component;
 use yii\base\InvalidConfigException;
 use yii\base\ModelEvent;
@@ -434,15 +435,87 @@ final class ValueObjectAttributeBehaviorTest extends TestCase
         $this->findProfile();
     }
 
-    public function testATypoInTheMapFailsAtAttach(): void
+    public function testATypoInTheMapFailsAtFirstUseNotAtAttach(): void
     {
-        $profile = new Profile();
+        $profile = new Profile(['email' => EmailAddress::from('ann@example.com')]);
         $profile->detachBehavior('valueObjects');
+        $profile->attachBehavior('typo', ['class' => ValueObjectAttributeBehavior::class, 'attributes' => ['emial' => EmailAddress::class]]);
 
         $this->expectException(InvalidConfigException::class);
         $this->expectExceptionMessage('maps "emial", which is not an attribute of ' . Profile::class . '.');
 
+        $profile->save(false);
+    }
+
+    public function testATypoInTheMapFailsOnRefreshToo(): void
+    {
+        $this->newProfile()->save();
+        $profile = $this->findProfile();
         $profile->attachBehavior('typo', ['class' => ValueObjectAttributeBehavior::class, 'attributes' => ['emial' => EmailAddress::class]]);
+
+        $this->expectException(InvalidConfigException::class);
+
+        $profile->refresh();
+    }
+
+    public function testTheTraitIgnoresOtherBehaviors(): void
+    {
+        $profile = $this->newProfile();
+        $profile->attachBehavior('other', ['class' => Behavior::class]);
+
+        self::assertTrue($profile->save());
+        self::assertSame(1, $profile->updateAttributes(['email' => EmailAddress::from('bob@example.com')]));
+        self::assertInstanceOf(EmailAddress::class, $profile->email);
+    }
+
+    public function testAModelBuildsBeforeItsTableExists(): void
+    {
+        $this->db()->createCommand()->dropTable('profile')->execute();
+
+        $profile = new PlainProfile();
+
+        self::assertInstanceOf(ValueObjectAttributeBehavior::class, $profile->getBehavior('valueObjects'));
+    }
+
+    public function testUpdateAttributesWritesPayloadsAndKeepsValueObjects(): void
+    {
+        $this->newProfile()->save();
+        $profile = $this->findProfile();
+        $age = $profile->age;
+
+        self::assertSame(1, $profile->updateAttributes(['email' => EmailAddress::from('bob@example.com'), 'range' => new IntRange(2, 3), 'name']));
+
+        $row = $this->storedRow();
+        self::assertSame('bob@example.com', $row['email']);
+        self::assertSame('{"min":2,"max":3}', $row['range']);
+        self::assertEquals(EmailAddress::from('bob@example.com'), $profile->email);
+        self::assertSame($profile->email, $profile->getOldAttribute('email'));
+        self::assertSame($age, $profile->age);
+        self::assertSame([], $profile->getDirtyAttributes());
+    }
+
+    public function testUpdateAttributesOfAnUnchangedValueObjectWritesNothing(): void
+    {
+        $this->newProfile()->save();
+        $profile = $this->findProfile();
+
+        self::assertSame(0, $profile->updateAttributes(['email' => EmailAddress::from('ann@example.com')]));
+        self::assertInstanceOf(EmailAddress::class, $profile->email);
+    }
+
+    public function testUpdateAttributesRestoresOnFailure(): void
+    {
+        $this->newProfile()->save();
+        $other = $this->newProfile();
+        $other->email = EmailAddress::from('bob@example.com');
+        $other->save();
+
+        $profile = $this->findProfile();
+        $email = EmailAddress::from('bob@example.com');
+
+        self::assertInstanceOf(IntegrityException::class, $this->failure(static fn (): int => $profile->updateAttributes(['email' => $email])));
+        self::assertSame($email, $profile->email);
+        self::assertInstanceOf(IntRange::class, $profile->range);
     }
 
     public function testAPartialSelectLeavesTheOtherColumnsAlone(): void

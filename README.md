@@ -107,8 +107,9 @@ $customer->email;                       // EmailAddress again
   throws `InvalidPayloadException`; keep it out of safe attributes (or `rules()`) and assign instances.
 - An invalid stored value fails loudly on find with the value object's exception or `InvalidPayloadException`
   (both extend `InvalidValueObjectException`); nothing silently becomes `null`.
-- A mapped class the payload mapper does not support, a name that is not an attribute of the model (a typo), or an
-  owner that is not an ActiveRecord, is an `InvalidConfigException` when the behavior is attached.
+- A mapped class the payload mapper does not support, or an owner that is not an ActiveRecord, is an
+  `InvalidConfigException` when the behavior is attached; a name that is not an attribute of the model (a typo) is
+  one at the first find or save (attach stays schema-free, so a model can be built before its table exists).
 - Any `BaseActiveRecord` works. Only a `yii\db\ActiveRecord` is asked whether a column is a JSON column; other
   ActiveRecords (MongoDB, Redis, Elasticsearch) get composites as JSON strings.
 - Pass `'mapper' => new ValueObjectMapper([new YourCodec()])` to map your own composite.
@@ -120,6 +121,9 @@ $customer->email;                       // EmailAddress again
 `ValueObjectAttributes` trait overrides `insert()`/`update()` and puts the value objects back in a `finally`; without
 the trait, call `$model->getBehavior('valueObjects')->hydrate()` after a failed save. `hydrate()` is idempotent and
 only restores the instances the behavior itself replaced, so rejected raw input is never turned into a value object.
+
+`updateAttributes()` skips the save events entirely; the trait overrides it to write payloads and restore the value
+objects. Without the trait, use `update(false, ['email'])` instead.
 
 ### Event order
 

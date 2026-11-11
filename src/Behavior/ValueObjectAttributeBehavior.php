@@ -53,6 +53,8 @@ final class ValueObjectAttributeBehavior extends Behavior
 
     private ValueObjectMapper $resolvedMapper;
 
+    private bool $attributesChecked = false;
+
     /**
      * What the last dehydrate() wrote, so hydrate() restores exactly those
      * instances and never builds a value object from raw input.
@@ -83,7 +85,7 @@ final class ValueObjectAttributeBehavior extends Behavior
     }
 
     /**
-     * @throws InvalidConfigException when the owner is not an ActiveRecord, a name is not one of its attributes or a mapped class is not supported
+     * @throws InvalidConfigException when the owner is not an ActiveRecord or a mapped class is not supported
      */
     #[Override]
     public function attach($owner): void
@@ -96,10 +98,6 @@ final class ValueObjectAttributeBehavior extends Behavior
         foreach ($this->attributes as $name => $class) {
             if (!\is_string($name) || !\is_string($class) || !$mapper->supports($class)) {
                 throw new InvalidConfigException(\sprintf('%s::$attributes must map attribute names to value object classes the payload mapper supports; "%s" => %s is not.', self::class, $name, \is_string($class) ? $class : get_debug_type($class)));
-            }
-
-            if (!$owner->hasAttribute($name)) {
-                throw new InvalidConfigException(\sprintf('%s::$attributes maps "%s", which is not an attribute of %s.', self::class, $name, $owner::class));
             }
         }
 
@@ -114,9 +112,11 @@ final class ValueObjectAttributeBehavior extends Behavior
      * @internal event handler
      *
      * @throws InvalidValueObjectException when a stored value is not a valid value object
+     * @throws InvalidConfigException when a mapped name is not an attribute of the model
      */
     public function hydrateFromStorage(): void
     {
+        $this->checkAttributes();
         $this->written = [];
         $this->writtenOld = [];
         $old = $this->record->getOldAttributes();
@@ -143,9 +143,11 @@ final class ValueObjectAttributeBehavior extends Behavior
      * @internal event handler
      *
      * @throws InvalidValueObjectException when a raw value is not a valid value object or a payload cannot be encoded
+     * @throws InvalidConfigException when a mapped name is not an attribute of the model
      */
     public function dehydrate(): void
     {
+        $this->checkAttributes();
         $this->hydrate();
         $old = $this->record->getOldAttributes();
         foreach ($this->attributes as $name => $class) {
@@ -195,6 +197,27 @@ final class ValueObjectAttributeBehavior extends Behavior
         }
         $this->written = [];
         $this->writtenOld = [];
+    }
+
+    /**
+     * Not at attach time: that would load the table schema for every new model,
+     * and fail for one built before its table exists (migrations, form-only use).
+     *
+     * @throws InvalidConfigException when a mapped name is not an attribute of the owner
+     */
+    private function checkAttributes(): void
+    {
+        if ($this->attributesChecked) {
+            return;
+        }
+
+        foreach (array_keys($this->attributes) as $name) {
+            if (!$this->record->hasAttribute($name)) {
+                throw new InvalidConfigException(\sprintf('%s::$attributes maps "%s", which is not an attribute of %s.', self::class, $name, $this->record::class));
+            }
+        }
+
+        $this->attributesChecked = true;
     }
 
     /**

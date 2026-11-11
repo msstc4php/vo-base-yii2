@@ -73,8 +73,22 @@ old **payloads** (old attributes are dehydrated too, so the dirty comparison is 
 
 Roave installs the base version via `Composer\Factory::createComposer(..., null, ..., $path)`, and a null config
 means `Factory::getComposerFile()`, i.e. `$COMPOSER` relative to the checkout. With `COMPOSER=composer-ci.json`
-(set on the step explicitly) the tag's `composer-ci.json`, which has the bower-asset stand-ins, is used. Not
-exercised yet: there is no tag.
+(workflow env, repeated on the step to make the dependency visible) the tag's `composer-ci.json`, which has the
+bower-asset stand-ins, is used. Unexercised until the first tag: the job exits early without one.
+
+## The attribute-name check runs at first use, not at attach
+
+Checking `$owner->hasAttribute()` in `attach()` loaded the table schema for every `new Model()` and every
+`instantiate()` during a find, and threw for a model built before its table exists (a migration, a form-only use).
+So a typo in `attributes` surfaces as `InvalidConfigException` at the first `hydrateFromStorage()`/`dehydrate()`
+(find, refresh, save, `updateAttributes()` via the trait). Class support is still checked at attach.
+
+## `updateAttributes()` skips the save events
+
+`BaseActiveRecord::updateAttributes()` calls `updateAll()` without `beforeSave`/`afterSave`, so the behavior never
+dehydrates and value objects would reach the query. The `ValueObjectAttributes` trait overrides it: assigns the
+name => value pairs, dehydrates, calls the parent with names only, restores in `finally`. Without the trait, use
+`update(false, [...names])` instead, or call the behavior's `dehydrate()` before and `hydrate()` after.
 
 ## A BoundedString as a safe attribute
 

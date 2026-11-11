@@ -10,7 +10,8 @@ use yii\db\BaseActiveRecord;
 
 /**
  * For an ActiveRecord using ValueObjectAttributeBehavior: puts the value objects
- * back when an insert or update fails or is vetoed, which afterSave never sees.
+ * back when an insert or update fails or is vetoed, which afterSave never sees,
+ * and dehydrates around updateAttributes(), which skips the save events.
  *
  * @phpstan-require-extends BaseActiveRecord
  */
@@ -48,12 +49,50 @@ trait ValueObjectAttributes
         }
     }
 
-    private function restoreValueObjects(): void
+    /**
+     * updateAttributes() skips beforeSave/afterSave, so the payloads are written
+     * and the value objects restored here.
+     *
+     * @param array<mixed> $attributes names, or name => value pairs, as BaseActiveRecord::updateAttributes() takes them
+     *
+     * @throws Throwable whatever the update throws, after the value objects are back
+     */
+    #[Override]
+    public function updateAttributes($attributes): int
     {
-        foreach ($this->getBehaviors() as $behavior) {
-            if ($behavior instanceof ValueObjectAttributeBehavior) {
-                $behavior->hydrate();
+        $names = [];
+        foreach ($attributes as $name => $value) {
+            if (\is_int($name)) {
+                $names[] = $value;
+            } else {
+                $this->setAttribute($name, $value);
+                $names[] = $name;
             }
         }
+
+        try {
+            foreach ($this->valueObjectBehaviors() as $behavior) {
+                $behavior->dehydrate();
+            }
+
+            return parent::updateAttributes($names);
+        } finally {
+            $this->restoreValueObjects();
+        }
+    }
+
+    private function restoreValueObjects(): void
+    {
+        foreach ($this->valueObjectBehaviors() as $behavior) {
+            $behavior->hydrate();
+        }
+    }
+
+    /**
+     * @return list<ValueObjectAttributeBehavior>
+     */
+    private function valueObjectBehaviors(): array
+    {
+        return array_values(array_filter($this->getBehaviors(), static fn (object $behavior): bool => $behavior instanceof ValueObjectAttributeBehavior));
     }
 }

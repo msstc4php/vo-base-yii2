@@ -8,7 +8,7 @@ First release: new integration, no stability promise until 1.0.
   refuses `BoundedString`, whose payload would let input choose its own bounds; takes a composite as array or JSON text.
 - `Behavior\ValueObjectAttributeBehavior`: maps ActiveRecord attributes to value objects after find/refresh and to
   the shared payload format (JSON for composites) around insert/update, without spurious UPDATEs; checks the map
-  against the model's attributes at attach time.
+  against the model's attributes at first use.
 - `Behavior\ValueObjectAttributes`: ActiveRecord trait that restores the value objects after a failed or vetoed
-  insert/update.
+  insert/update and handles `updateAttributes()`, which skips the save events.
 - Requires `msstc4php/vo-base` `^1.1` and `yiisoft/yii2` `^2.0.55`.

@@ -100,8 +100,8 @@ jobs:
           tools: composer:v2
       - run: composer update --prefer-dist --no-progress --no-interaction
       - name: Roave BC check
-        # Roave installs the base tag's dependencies through Composer's Factory, which reads $COMPOSER relative to that
-        # checkout: the tag's own composer-ci.json, with the bower-asset stand-ins. Its composer.json would not install.
+        # Explicit for Roave's Factory (same value as the workflow env): it installs the base tag's dependencies from
+        # $COMPOSER relative to that checkout, i.e. the tag's composer-ci.json with the bower-asset stand-ins.
         env:
           COMPOSER: composer-ci.json
         run: |

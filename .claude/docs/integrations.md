@@ -11,6 +11,7 @@
 - Every `InvalidValueObjectException` (including `InvalidPayloadException` for wrong type/shape) becomes the
   validation error. A composite also comes as JSON text (what the behavior accepts on save). Unlike the Symfony validator, a non-string is not an exception: Yii's validators report wrong
   input types as errors (`StringValidator` does), and request data can be arrays.
+- No class name reaches a validation message: params are only `{attribute}` (the label) and `{value}` (the input).
 - Default message `BaseYii::t('yii', '{attribute} is invalid.')` — that string is in Yii's own message catalogue,
   so it is translated in every bundled language.
 - `clientValidateAttribute()` is the base one, returning null: no client-side validation.
@@ -28,8 +29,9 @@
 - Composite detection is the mapper's `isComposite()`: a string for a composite class is JSON text and is decoded
   first (`Internal\CompositeJson`); a JSON scalar (`5`) is `InvalidPayloadException`. Invalid JSON becomes `InvalidPayloadException` with the `JsonException` as
   previous.
-- `attach()` also checks `$owner->hasAttribute($name)` (a typo is `InvalidConfigException`). For a db ActiveRecord
-  that loads the table schema at attach time, which `__set` would do anyway.
+- The first `hydrateFromStorage()`/`dehydrate()` checks `$owner->hasAttribute($name)` once per behavior (a typo is
+  `InvalidConfigException`); not at attach, which would load the schema for every new model.
+- The trait also overrides `updateAttributes()`, which bypasses the save events.
 - One default `ValueObjectMapper` is shared (static) by every behavior and validator without an own `mapper`.
 - Failed saves: the `ValueObjectAttributes` trait wraps `insert()`/`update()` in `try`/`finally` and calls each
   attached behavior's `hydrate()`. A trait cannot be a `#[CoversClass]` target: tests use `#[CoversTrait]`, which
