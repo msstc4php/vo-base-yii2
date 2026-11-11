@@ -1,0 +1,17 @@
+deptrac:
+  paths:
+    - ./src
+  layers:
+    - name: Validator
+      collectors:
+        - type: directory
+          value: src/Validator/.*
+    - name: Behavior
+      collectors:
+        - type: directory
+          value: src/Behavior/.*
+  ruleset:
+    # Both depend on the core and Yii only; neither is declared as a layer. The
+    # validator (request input) and the behavior (storage) never see each other.
+    Validator: ~
+    Behavior: ~

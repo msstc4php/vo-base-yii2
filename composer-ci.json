@@ -1,0 +1,76 @@
+{
+    "name": "msstc4php/vo-base-yii2",
+    "description": "Yii 2 validator and ActiveRecord attribute behavior for msstc4php/vo-base. (CI profile: CI-only tools and the bower-asset stand-ins)",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "value-object",
+        "yii2",
+        "activerecord",
+        "validator",
+        "bridge",
+        "ddd"
+    ],
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/msstc4php/vo-base"
+        }
+    ],
+    "require": {
+        "php": ">=8.4",
+        "msstc4php/vo-base": "^1.1",
+        "yiisoft/yii2": "^2.0.55"
+    },
+    "require-dev": {
+        "deptrac/deptrac": "^4.6",
+        "friendsofphp/php-cs-fixer": "^3.76",
+        "infection/infection": "^0.32",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-phpunit": "^2.0",
+        "phpstan/phpstan-strict-rules": "^2.0",
+        "phpunit/phpunit": ">=11.0",
+        "rector/rector": "^2.1",
+        "roave/backward-compatibility-check": "^8.20",
+        "roave/security-advisories": "dev-latest"
+    },
+    "replace": {
+        "bower-asset/inputmask": "*",
+        "bower-asset/jquery": "*",
+        "bower-asset/punycode": "*",
+        "bower-asset/yii2-pjax": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "MSSTC4PHP\\ValueObject\\Yii2\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "MSSTC4PHP\\ValueObject\\Yii2\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "phpstan/extension-installer": true,
+            "yiisoft/yii2-composer": false,
+            "infection/extension-installer": true
+        },
+        "sort-packages": true
+    },
+    "authors": [
+        {
+            "name": "Maxim Shamaev",
+            "email": "maxim.shamaev@gmail.com"
+        }
+    ],
+    "extra": {
+        "bundle-standard": {
+            "kind": "library",
+            "runtime": "php84"
+        }
+    }
+}
