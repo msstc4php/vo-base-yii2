@@ -8,6 +8,7 @@ use BackedEnum;
 use MSSTC4PHP\ValueObject\Contract\ValueObject;
 use MSSTC4PHP\ValueObject\Exception\InvalidValueObjectException;
 use MSSTC4PHP\ValueObject\Payload\ValueObjectMapper;
+use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
 use Override;
 use yii\base\InvalidConfigException;
 use yii\BaseYii;
@@ -17,6 +18,10 @@ use yii\validators\Validator;
  * Delegates validation to the value object: the attribute is valid when the value
  * object accepts it. Usage in rules():
  * `['email', ValueObjectValidator::class, 'valueObjectClass' => EmailAddress::class]`.
+ *
+ * Accepts what ValueObjectAttributeBehavior accepts on save: an instance, the
+ * scalar payload (numeric strings for numbers), and for a composite its payload
+ * array or that array as JSON text.
  *
  * Emptiness is the job of `required` (or skipOnEmpty): null and '' always pass.
  * Server-side only; no client-side validation is generated.
@@ -45,6 +50,8 @@ final class ValueObjectValidator extends Validator
 
     private string $errorMessage;
 
+    private static ?ValueObjectMapper $defaultMapper = null;
+
     /**
      * @throws InvalidConfigException when valueObjectClass is missing, unsupported, or not safe to build from user input
      */
@@ -53,7 +60,7 @@ final class ValueObjectValidator extends Validator
     {
         parent::init();
 
-        $this->resolvedMapper = $this->mapper ?? new ValueObjectMapper();
+        $this->resolvedMapper = $this->mapper ?? self::$defaultMapper ??= new ValueObjectMapper();
         $class = $this->valueObjectClass;
         if ($class === null || !$this->resolvedMapper->supports($class)) {
             throw new InvalidConfigException(\sprintf('%s::$valueObjectClass must name a value object class the payload mapper supports, %s given.', self::class, $class ?? 'null'));
@@ -79,7 +86,8 @@ final class ValueObjectValidator extends Validator
         }
 
         try {
-            $this->resolvedMapper->fromUntrustedPayload($this->class, $value);
+            $payload = \is_string($value) && $this->resolvedMapper->isComposite($this->class) ? CompositeJson::decode($this->class, $value) : $value;
+            $this->resolvedMapper->fromUntrustedPayload($this->class, $payload);
         } catch (InvalidValueObjectException) {
             return [$this->errorMessage, []];
         }

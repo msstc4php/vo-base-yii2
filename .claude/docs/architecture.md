@@ -1,9 +1,12 @@
 # Architecture
 
-Two areas, enforced by `deptrac.yaml` as two layers with no allowed edges between them:
+Three layers in `deptrac.yaml`; `Validator` and `Behavior` never see each other, both may use `Internal`:
 
 - **`Validator/`** — `ValueObjectValidator`, the request-input path.
-- **`Behavior/`** — `ValueObjectAttributeBehavior`, the storage path.
+- **`Behavior/`** — `ValueObjectAttributeBehavior` (the storage path) and the `ValueObjectAttributes` trait for the
+  model (restores value objects after a failed/vetoed save).
+- **`Internal/`** — `CompositeJson` (`@internal`): decode/encode of a composite's JSON text, so the validator accepts
+  exactly what the behavior accepts on save, and both report JSON errors as `InvalidPayloadException`.
 
 The core and Yii are not declared as layers, so they do not appear in the ruleset. Both areas call the core's
 `Payload\ValueObjectMapper` and nothing else decides a value object's kind or storage form. The one exception is
@@ -22,11 +25,16 @@ payload carries its own `minLength`/`maxLength`, so:
 
 ## The behavior's attribute life cycle
 
-| Event | Attributes | Old attributes |
-|---|---|---|
-| `afterFind`, `afterRefresh` | payload -> value object | the same instance when the old payload is identical |
-| `beforeInsert`, `beforeUpdate` | value object (or raw) -> payload | value object -> payload |
-| `afterInsert`, `afterUpdate` | payload -> value object | the same instance when identical, else its own hydration |
+| Event | Handler | Attributes | Old attributes |
+|---|---|---|---|
+| `afterFind`, `afterRefresh` | `hydrateFromStorage()` | payload -> value object (`fromPayload`, trusted) | the same instance when the old payload is identical |
+| `beforeInsert`, `beforeUpdate` | `dehydrate()` | value object (or raw, untrusted) -> payload, recorded in `$written` | value object -> payload, recorded in `$writtenOld` |
+| `afterInsert`, `afterUpdate`, trait `finally` | `hydrate()` | the recorded instance back where the payload is still in place | the current attribute's instance when its payload matches, else the recorded old instance |
+
+`hydrate()` never calls the mapper: it puts back the exact instances `dehydrate()` replaced, so it cannot fail, is
+idempotent (the records are cleared), and never turns rejected raw input into a value object (an attribute whose
+raw value was refused was never recorded). `dehydrate()` starts with `hydrate()`, so a second save after a vetoed
+one without the trait still works.
 
 Why both: `getDirtyAttributes()` compares with `!==`. With old attributes as value objects sharing the current
 instance, an untouched attribute is clean outside `save()`; with both sides dehydrated inside `save()`, the comparison

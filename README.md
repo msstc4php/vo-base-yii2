@@ -46,6 +46,8 @@ public function rules(): array
 - Form input arrives as strings: an int-backed value object (and an int-backed enum) accepts a canonical decimal-digit string (`"080"` is rejected),
   a float-backed one a numeric string. A composite (`IntRange`, `GeoCoordinates`, `DateRange`) takes its payload
   array, e.g. `['min' => 1, 'max' => 5]` from a JSON body.
+- It accepts what the behavior accepts on save, so a rule and the model agree: a composite may also come as its
+  JSON text (`'{"min":1,"max":5}'`, e.g. a hidden field).
 - An instance of the value object itself is valid, so rules keep working on a model whose attribute already holds
   one (see the behavior below).
 - Wrong types (an array for a string, an object, a bool) are a validation error, not an exception.
@@ -61,6 +63,7 @@ public function rules(): array
 use MSSTC4PHP\ValueObject\I18n\CountryCode;
 use MSSTC4PHP\ValueObject\Primitive\IntRange;
 use MSSTC4PHP\ValueObject\Yii2\Behavior\ValueObjectAttributeBehavior;
+use MSSTC4PHP\ValueObject\Yii2\Behavior\ValueObjectAttributes;
 
 /**
  * @property EmailAddress|null $email
@@ -69,6 +72,8 @@ use MSSTC4PHP\ValueObject\Yii2\Behavior\ValueObjectAttributeBehavior;
  */
 final class Customer extends ActiveRecord
 {
+    use ValueObjectAttributes; // restores the value objects when a save fails or is vetoed
+
     public function behaviors(): array
     {
         return [
@@ -96,12 +101,34 @@ $customer->email;                       // EmailAddress again
 - An unchanged attribute causes no UPDATE; an equal value object assigned anew causes none either (the payloads are
   compared). A changed one is written.
 - A raw value in the attribute (a string from `load()`) is validated and canonicalised on save; an invalid one
-  throws. A `BoundedString` attribute only takes a `BoundedString` instance on save, never raw input.
+  throws. A composite may be its payload array or JSON text.
+- A `BoundedString` attribute only takes a `BoundedString` instance on save, never raw input: its payload carries
+  its own length limits. If it is a *safe* attribute, `load($request->post())` can put an array there and the save
+  throws `InvalidPayloadException`; keep it out of safe attributes (or `rules()`) and assign instances.
 - An invalid stored value fails loudly on find with the value object's exception or `InvalidPayloadException`
   (both extend `InvalidValueObjectException`); nothing silently becomes `null`.
-- A mapped class the payload mapper does not support, or an owner that is not an ActiveRecord, is an
-  `InvalidConfigException` when the behavior is attached.
+- A mapped class the payload mapper does not support, a name that is not an attribute of the model (a typo), or an
+  owner that is not an ActiveRecord, is an `InvalidConfigException` when the behavior is attached.
+- Any `BaseActiveRecord` works. Only a `yii\db\ActiveRecord` is asked whether a column is a JSON column; other
+  ActiveRecords (MongoDB, Redis, Elasticsearch) get composites as JSON strings.
 - Pass `'mapper' => new ValueObjectMapper([new YourCodec()])` to map your own composite.
+
+### Failed and vetoed saves
+
+`afterSave` never runs when an INSERT/UPDATE throws (an `IntegrityException` on a unique index, say) or a
+`beforeSave` handler sets `isValid = false`. Without help the model would keep the payloads. The
+`ValueObjectAttributes` trait overrides `insert()`/`update()` and puts the value objects back in a `finally`; without
+the trait, call `$model->getBehavior('valueObjects')->hydrate()` after a failed save. `hydrate()` is idempotent and
+only restores the instances the behavior itself replaced, so rejected raw input is never turned into a value object.
+
+### Event order
+
+Behaviors attach before any `on()` handler, so the behavior's handlers run first:
+
+- a `beforeInsert`/`beforeUpdate` handler (and code in an overridden `beforeSave()` after `parent::beforeSave()`)
+  sees payloads;
+- an `afterInsert`/`afterUpdate` handler sees value objects, but `AfterSaveEvent::$changedAttributes` holds the
+  **old payloads** (scalars/JSON), not value objects.
 
 ## Stored formats
 

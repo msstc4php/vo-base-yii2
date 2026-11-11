@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MSSTC4PHP\ValueObject\Yii2\Tests\Unit\Behavior;
 
+use Closure;
 use DateTimeImmutable;
 use JsonException;
 use MSSTC4PHP\ValueObject\Exception\InvalidEmailAddressException;
@@ -19,22 +20,36 @@ use MSSTC4PHP\ValueObject\Primitive\BoundedString;
 use MSSTC4PHP\ValueObject\Primitive\IntRange;
 use MSSTC4PHP\ValueObject\Primitive\Percentage;
 use MSSTC4PHP\ValueObject\Primitive\PositiveInt;
+use MSSTC4PHP\ValueObject\Temporal\DateRange;
 use MSSTC4PHP\ValueObject\Yii2\Behavior\ValueObjectAttributeBehavior;
+use MSSTC4PHP\ValueObject\Yii2\Behavior\ValueObjectAttributes;
+use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\PlainProfile;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Profile;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Size;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\SizeCodec;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Support\YiiApplication;
+use MSSTC4PHP\ValueObject\Yii2\Validator\ValueObjectValidator;
 use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Throwable;
 use yii\base\Component;
 use yii\base\InvalidConfigException;
+use yii\base\ModelEvent;
+use yii\db\AfterSaveEvent;
+use yii\db\BaseActiveRecord;
+use yii\db\IntegrityException;
 
 #[CoversClass(ValueObjectAttributeBehavior::class)]
+#[CoversTrait(ValueObjectAttributes::class)]
+#[UsesClass(ValueObjectValidator::class)]
+#[CoversClass(CompositeJson::class)]
 final class ValueObjectAttributeBehaviorTest extends TestCase
 {
     use YiiApplication;
@@ -50,6 +65,7 @@ final class ValueObjectAttributeBehaviorTest extends TestCase
         'color' => '#ffaa00',
         'range' => '{"min":1,"max":5}',
         'label' => '{"value":"hi","minLength":1,"maxLength":10}',
+        'period' => '{"start":"2026-11-01T00:00:00.000000+00:00","end":"2026-11-30T23:59:59.500000+00:00"}',
     ];
 
     #[Override]
@@ -85,6 +101,8 @@ final class ValueObjectAttributeBehaviorTest extends TestCase
         self::assertEquals(HexColor::from('#ffaa00'), $profile->color);
         self::assertEquals(new IntRange(1, 5), $profile->range);
         self::assertEquals(new BoundedString('hi', 1, 10), $profile->label);
+        self::assertInstanceOf(DateRange::class, $profile->period);
+        self::assertSame('2026-11-30T23:59:59.500000+00:00', $profile->period->end->format('Y-m-d\\TH:i:s.uP'));
         self::assertSame([], $profile->getDirtyAttributes());
         self::assertSame($profile->email, $profile->getOldAttribute('email'));
     }
@@ -257,6 +275,176 @@ final class ValueObjectAttributeBehaviorTest extends TestCase
         self::assertNull($this->storedRow()['label']);
     }
 
+    public function testAVetoedInsertKeepsTheValueObjects(): void
+    {
+        $profile = $this->newProfile();
+        $email = $profile->email;
+        $profile->on(BaseActiveRecord::EVENT_BEFORE_INSERT, static function (ModelEvent $event): void {
+            $event->isValid = false;
+        });
+
+        self::assertFalse($profile->save());
+
+        self::assertSame($email, $profile->email);
+        self::assertTrue($profile->getIsNewRecord());
+        self::assertFalse($profile->save(false));
+        self::assertSame($email, $profile->email);
+    }
+
+    public function testAVetoedUpdateKeepsTheValueObjectsAndTheDirtyState(): void
+    {
+        $this->newProfile()->save();
+        $profile = $this->findProfile();
+        $profile->email = EmailAddress::from('bob@example.com');
+
+        $age = $profile->age;
+        $profile->on(BaseActiveRecord::EVENT_BEFORE_UPDATE, static function (ModelEvent $event): void {
+            $event->isValid = false;
+        });
+
+        self::assertFalse($profile->update());
+
+        self::assertEquals(EmailAddress::from('bob@example.com'), $profile->email);
+        self::assertEquals(EmailAddress::from('ann@example.com'), $profile->getOldAttribute('email'));
+        self::assertSame($age, $profile->age);
+        self::assertSame($age, $profile->getOldAttribute('age'));
+        self::assertSame(['email'], array_keys($profile->getDirtyAttributes()));
+    }
+
+    public function testInsertAndUpdateValidateByDefault(): void
+    {
+        self::assertFalse(new Profile(['email' => 'nope'])->insert());
+
+        $this->newProfile()->save();
+        $profile = $this->findProfile();
+        $profile->email = 'nope';
+
+        self::assertFalse($profile->update());
+        self::assertSame(['Email is invalid.'], $profile->getErrors('email'));
+    }
+
+    public function testAVetoedUpdateRestoresEveryAttributeAndKeepsEqualOnesClean(): void
+    {
+        $this->insertRow(['age' => 42, 'range' => '{"min":1,"max":5}']);
+        $profile = $this->findProfile();
+        $profile->range = new IntRange(1, 5);
+        $profile->on(BaseActiveRecord::EVENT_BEFORE_UPDATE, static function (ModelEvent $event): void {
+            $event->isValid = false;
+        });
+
+        self::assertFalse($profile->update());
+
+        self::assertEquals(PositiveInt::from(42), $profile->getOldAttribute('age'));
+        self::assertSame($profile->range, $profile->getOldAttribute('range'));
+        self::assertSame([], $profile->getDirtyAttributes());
+    }
+
+    public function testAFailedInsertKeepsTheValueObjects(): void
+    {
+        $this->newProfile()->save();
+        $duplicate = $this->newProfile();
+        $email = $duplicate->email;
+
+        self::assertInstanceOf(IntegrityException::class, $this->failure(static fn (): bool => $duplicate->save()));
+
+        self::assertSame($email, $duplicate->email);
+        self::assertInstanceOf(IntRange::class, $duplicate->range);
+    }
+
+    public function testWithoutTheTraitHydrateRestoresAfterAVeto(): void
+    {
+        $profile = new PlainProfile(['email' => EmailAddress::from('ann@example.com')]);
+        $profile->on(BaseActiveRecord::EVENT_BEFORE_INSERT, static function (ModelEvent $event): void {
+            $event->isValid = false;
+        });
+
+        self::assertFalse($profile->save());
+        self::assertSame('ann@example.com', $profile->email);
+
+        $behavior = $profile->getBehavior('valueObjects');
+        self::assertInstanceOf(ValueObjectAttributeBehavior::class, $behavior);
+        $behavior->hydrate();
+        $behavior->hydrate();
+
+        self::assertEquals(EmailAddress::from('ann@example.com'), $profile->email);
+    }
+
+    public function testASecondSaveAfterAVetoWithoutTheTraitStillWorks(): void
+    {
+        $profile = new PlainProfile(['email' => EmailAddress::from('ann@example.com'), 'label' => new BoundedString('hi', 1, 10)]);
+        $veto = static function (ModelEvent $event): void {
+            $event->isValid = false;
+        };
+        $profile->on(BaseActiveRecord::EVENT_BEFORE_INSERT, $veto);
+        self::assertFalse($profile->save());
+        $profile->off(BaseActiveRecord::EVENT_BEFORE_INSERT, $veto);
+
+        self::assertTrue($profile->save());
+        self::assertSame('{"value":"hi","minLength":1,"maxLength":10}', $this->storedRow()['label']);
+        self::assertInstanceOf(BoundedString::class, $profile->label);
+    }
+
+    public function testRejectedRawInputIsNeverTurnedIntoAValueObject(): void
+    {
+        $profile = new Profile(['email' => EmailAddress::from('ann@example.com')]);
+        $profile->setAttributes(['label' => ['value' => 'x', 'minLength' => 0, 'maxLength' => null]], false);
+
+        self::assertInstanceOf(InvalidPayloadException::class, $this->failure(static fn (): bool => $profile->save(false)));
+        self::assertIsArray($profile->label);
+        self::assertInstanceOf(EmailAddress::class, $profile->email);
+    }
+
+    public function testAfterSaveHandlersSeeValueObjectsAndPayloadsInChangedAttributes(): void
+    {
+        $this->newProfile()->save();
+        $profile = $this->findProfile();
+        $profile->email = EmailAddress::from('bob@example.com');
+
+        $seen = [];
+        $profile->on(BaseActiveRecord::EVENT_AFTER_UPDATE, static function (AfterSaveEvent $event) use (&$seen): void {
+            \assert($event->sender instanceof Profile);
+            $seen = [$event->sender->email, $event->changedAttributes];
+        });
+
+        $profile->update();
+
+        self::assertEquals([EmailAddress::from('bob@example.com'), ['email' => 'ann@example.com']], $seen);
+    }
+
+    public function testAnUnencodablePayloadFailsTheSave(): void
+    {
+        $profile = new Profile(['label' => new BoundedString("\xB1\x31")]);
+
+        $e = $this->failure(static fn (): bool => $profile->save(false));
+
+        self::assertInstanceOf(InvalidPayloadException::class, $e);
+        self::assertInstanceOf(JsonException::class, $e->getPrevious());
+        self::assertStringStartsWith('A ' . BoundedString::class . ' payload cannot be encoded as JSON: ', $e->getMessage());
+
+        self::assertInstanceOf(BoundedString::class, $profile->label);
+    }
+
+    public function testCompositeJsonThatIsNotAnObjectFailsLoudly(): void
+    {
+        $this->insertRow(['range' => '5']);
+
+        $this->expectException(InvalidPayloadException::class);
+        $this->expectExceptionMessage('payload must be a JSON object, int given.');
+
+        $this->findProfile();
+    }
+
+    public function testATypoInTheMapFailsAtAttach(): void
+    {
+        $profile = new Profile();
+        $profile->detachBehavior('valueObjects');
+
+        $this->expectException(InvalidConfigException::class);
+        $this->expectExceptionMessage('maps "emial", which is not an attribute of ' . Profile::class . '.');
+
+        $profile->attachBehavior('typo', ['class' => ValueObjectAttributeBehavior::class, 'attributes' => ['emial' => EmailAddress::class]]);
+    }
+
     public function testAPartialSelectLeavesTheOtherColumnsAlone(): void
     {
         $this->newProfile()->save();
@@ -405,6 +593,20 @@ final class ValueObjectAttributeBehaviorTest extends TestCase
         new Component()->attachBehavior('vo', ['class' => ValueObjectAttributeBehavior::class, 'attributes' => ['email' => EmailAddress::class]]);
     }
 
+    /**
+     * @param Closure(): mixed $action
+     */
+    private function failure(Closure $action): Throwable
+    {
+        try {
+            $action();
+        } catch (Throwable $e) {
+            return $e;
+        }
+
+        self::fail('No exception.');
+    }
+
     private function newProfile(): Profile
     {
         return new Profile([
@@ -417,6 +619,7 @@ final class ValueObjectAttributeBehaviorTest extends TestCase
             'color' => HexColor::from('#FFAA00'),
             'range' => new IntRange(1, 5),
             'label' => new BoundedString('hi', 1, 10),
+            'period' => new DateRange(new DateTimeImmutable('2026-11-01T00:00:00Z'), new DateTimeImmutable('2026-11-30T23:59:59.5Z')),
         ]);
     }
 

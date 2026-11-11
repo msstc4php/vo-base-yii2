@@ -14,6 +14,7 @@ use MSSTC4PHP\ValueObject\Primitive\BoundedString;
 use MSSTC4PHP\ValueObject\Primitive\IntRange;
 use MSSTC4PHP\ValueObject\Primitive\Percentage;
 use MSSTC4PHP\ValueObject\Primitive\PositiveInt;
+use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Size;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\SizeCodec;
@@ -28,6 +29,7 @@ use yii\base\InvalidConfigException;
 use yii\web\View;
 
 #[CoversClass(ValueObjectValidator::class)]
+#[CoversClass(CompositeJson::class)]
 final class ValueObjectValidatorTest extends TestCase
 {
     use YiiApplication;
@@ -46,6 +48,7 @@ final class ValueObjectValidatorTest extends TestCase
         yield 'int enum, form string' => [Priority::class, '2'];
         yield 'int enum, int' => [Priority::class, 1];
         yield 'composite array' => [IntRange::class, ['min' => 1, 'max' => 5]];
+        yield 'composite JSON text, as the behavior takes it' => [IntRange::class, '{"min":1,"max":5}'];
         yield 'already the value object' => [EmailAddress::class, EmailAddress::from('user@example.com')];
         yield 'already the enum' => [CountryCode::class, CountryCode::DE];
     }
@@ -75,7 +78,8 @@ final class ValueObjectValidatorTest extends TestCase
         yield 'unknown enum case' => [CountryCode::class, 'XX'];
         yield 'unknown int enum case' => [Priority::class, '9'];
         yield 'invalid composite' => [IntRange::class, ['min' => 5, 'max' => 1]];
-        yield 'composite as text' => [IntRange::class, '{"min":1,"max":5}'];
+        yield 'composite broken JSON' => [IntRange::class, '{"min":1'];
+        yield 'composite JSON not an object' => [IntRange::class, '5'];
         yield 'array for a string' => [EmailAddress::class, ['user@example.com']];
         yield 'bool' => [PositiveInt::class, true];
         yield 'another object' => [EmailAddress::class, new stdClass()];

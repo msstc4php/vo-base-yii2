@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace MSSTC4PHP\ValueObject\Yii2\Behavior;
 
 use BackedEnum;
-use JsonException;
 use MSSTC4PHP\ValueObject\Contract\ValueObject;
 use MSSTC4PHP\ValueObject\Exception\InvalidPayloadException;
 use MSSTC4PHP\ValueObject\Exception\InvalidValueObjectException;
 use MSSTC4PHP\ValueObject\Payload\ValueObjectMapper;
+use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
 use Override;
 use yii\base\Behavior;
 use yii\base\InvalidConfigException;
@@ -25,10 +25,15 @@ use yii\db\BaseActiveRecord;
  * instance with its old value, so getDirtyAttributes() stays meaningful outside
  * save() and compares payloads, by value, inside it.
  *
+ * A failed or vetoed save never reaches afterSave: use the ValueObjectAttributes
+ * trait on the model, or call hydrate() yourself.
+ *
  * A composite is stored as JSON text, or as an array for a column Yii itself
  * maps to an array (a JSON column on MySQL or PostgreSQL).
  *
  * @extends Behavior<BaseActiveRecord>
+ *
+ * @phpstan-type Payload string|int|float|array<string, scalar|null>
  */
 final class ValueObjectAttributeBehavior extends Behavior
 {
@@ -42,9 +47,24 @@ final class ValueObjectAttributeBehavior extends Behavior
      */
     public ?ValueObjectMapper $mapper = null;
 
+    private static ?ValueObjectMapper $defaultMapper = null;
+
     private BaseActiveRecord $record;
 
     private ValueObjectMapper $resolvedMapper;
+
+    /**
+     * What the last dehydrate() wrote, so hydrate() restores exactly those
+     * instances and never builds a value object from raw input.
+     *
+     * @var array<string, array{ValueObject|BackedEnum, Payload}>
+     */
+    private array $written = [];
+
+    /**
+     * @var array<string, array{ValueObject|BackedEnum, Payload}>
+     */
+    private array $writtenOld = [];
 
     /**
      * @return array<string, string>
@@ -53,8 +73,8 @@ final class ValueObjectAttributeBehavior extends Behavior
     public function events(): array
     {
         return [
-            BaseActiveRecord::EVENT_AFTER_FIND => 'hydrate',
-            BaseActiveRecord::EVENT_AFTER_REFRESH => 'hydrate',
+            BaseActiveRecord::EVENT_AFTER_FIND => 'hydrateFromStorage',
+            BaseActiveRecord::EVENT_AFTER_REFRESH => 'hydrateFromStorage',
             BaseActiveRecord::EVENT_BEFORE_INSERT => 'dehydrate',
             BaseActiveRecord::EVENT_BEFORE_UPDATE => 'dehydrate',
             BaseActiveRecord::EVENT_AFTER_INSERT => 'hydrate',
@@ -63,7 +83,7 @@ final class ValueObjectAttributeBehavior extends Behavior
     }
 
     /**
-     * @throws InvalidConfigException when the owner is not an ActiveRecord or a mapped class is not supported
+     * @throws InvalidConfigException when the owner is not an ActiveRecord, a name is not one of its attributes or a mapped class is not supported
      */
     #[Override]
     public function attach($owner): void
@@ -72,10 +92,14 @@ final class ValueObjectAttributeBehavior extends Behavior
             throw new InvalidConfigException(\sprintf('%s attaches to a %s, %s given.', self::class, BaseActiveRecord::class, get_debug_type($owner)));
         }
 
-        $mapper = $this->mapper ?? new ValueObjectMapper();
+        $mapper = $this->mapper ?? self::$defaultMapper ??= new ValueObjectMapper();
         foreach ($this->attributes as $name => $class) {
             if (!\is_string($name) || !\is_string($class) || !$mapper->supports($class)) {
                 throw new InvalidConfigException(\sprintf('%s::$attributes must map attribute names to value object classes the payload mapper supports; "%s" => %s is not.', self::class, $name, \is_string($class) ? $class : get_debug_type($class)));
+            }
+
+            if (!$owner->hasAttribute($name)) {
+                throw new InvalidConfigException(\sprintf('%s::$attributes maps "%s", which is not an attribute of %s.', self::class, $name, $owner::class));
             }
         }
 
@@ -85,12 +109,16 @@ final class ValueObjectAttributeBehavior extends Behavior
     }
 
     /**
-     * Column values to value objects; null stays null.
+     * Column values to value objects after find and refresh; null stays null.
+     *
+     * @internal event handler
      *
      * @throws InvalidValueObjectException when a stored value is not a valid value object
      */
-    public function hydrate(): void
+    public function hydrateFromStorage(): void
     {
+        $this->written = [];
+        $this->writtenOld = [];
         $old = $this->record->getOldAttributes();
         foreach ($this->attributes as $name => $class) {
             $raw = $this->record->getAttribute($name);
@@ -107,25 +135,66 @@ final class ValueObjectAttributeBehavior extends Behavior
     }
 
     /**
-     * Value objects to column values. A raw value (a string from load(), say) is
-     * untrusted input: it is validated and canonicalised on the way, and refused
-     * for a class whose payload carries its own constraints (BoundedString).
+     * Value objects to column values before insert and update. A raw value (a
+     * string from load(), say) is untrusted input: it is validated and
+     * canonicalised on the way, and refused for a class whose payload carries its
+     * own constraints (BoundedString).
      *
-     * @throws InvalidValueObjectException when a raw value is not a valid value object
+     * @internal event handler
+     *
+     * @throws InvalidValueObjectException when a raw value is not a valid value object or a payload cannot be encoded
      */
     public function dehydrate(): void
     {
+        $this->hydrate();
         $old = $this->record->getOldAttributes();
         foreach ($this->attributes as $name => $class) {
-            $value = $this->toColumn($name, $this->fromInput($name, $class, $this->record->getAttribute($name)));
-            if ($value !== null) {
-                $this->record->setAttribute($name, $value);
+            $valueObject = $this->fromInput($name, $class, $this->record->getAttribute($name));
+            if ($valueObject !== null) {
+                $payload = $this->toColumn($name, $class, $valueObject);
+                $this->written[$name] = [$valueObject, $payload];
+                $this->record->setAttribute($name, $payload);
             }
 
-            if (isset($old[$name])) {
-                $this->record->setOldAttribute($name, $this->toColumn($name, $this->fromStorage($class, $old[$name])));
+            $oldValueObject = isset($old[$name]) ? $this->fromStorage($class, $old[$name]) : null;
+            if ($oldValueObject !== null) {
+                $payload = $this->toColumn($name, $class, $oldValueObject);
+                $this->writtenOld[$name] = [$oldValueObject, $payload];
+                $this->record->setOldAttribute($name, $payload);
             }
         }
+    }
+
+    /**
+     * Puts back the value objects the last dehydrate() replaced with payloads.
+     * Runs after a successful save; call it after a failed or vetoed one when the
+     * model does not use the ValueObjectAttributes trait. Idempotent.
+     */
+    public function hydrate(): void
+    {
+        foreach ($this->written as $name => [$valueObject, $payload]) {
+            if ($this->record->getAttribute($name) === $payload) {
+                $this->record->setAttribute($name, $valueObject);
+            }
+        }
+
+        $old = $this->record->getOldAttributes();
+        foreach ($this->attributes as $name => $class) {
+            if (!isset($old[$name])) {
+                continue;
+            }
+
+            // Prefer the current instance, so a saved or unchanged attribute is not dirty.
+            foreach ([$this->written[$name] ?? null, $this->writtenOld[$name] ?? null] as $entry) {
+                if ($entry !== null && $old[$name] === $entry[1]) {
+                    $this->record->setOldAttribute($name, $entry[0]);
+
+                    break;
+                }
+            }
+        }
+        $this->written = [];
+        $this->writtenOld = [];
     }
 
     /**
@@ -141,7 +210,9 @@ final class ValueObjectAttributeBehavior extends Behavior
             return $raw;
         }
 
-        return $this->resolvedMapper->fromPayload($class, $this->decodeComposite($class, $raw));
+        $payload = \is_string($raw) && $this->resolvedMapper->isComposite($class) ? CompositeJson::decode($class, $raw) : $raw;
+
+        return $this->resolvedMapper->fromPayload($class, $payload);
     }
 
     /**
@@ -161,41 +232,21 @@ final class ValueObjectAttributeBehavior extends Behavior
             throw new InvalidPayloadException(\sprintf('The "%s" attribute takes a %s instance, %s given: a raw payload would choose its own constraints.', $name, $class, get_debug_type($raw)));
         }
 
-        return $this->resolvedMapper->fromUntrustedPayload($class, $this->decodeComposite($class, $raw));
+        $payload = \is_string($raw) && $this->resolvedMapper->isComposite($class) ? CompositeJson::decode($class, $raw) : $raw;
+
+        return $this->resolvedMapper->fromUntrustedPayload($class, $payload);
     }
 
     /**
-     * A composite in a text column arrives as its JSON text.
+     * @return Payload
      *
-     * @param class-string<ValueObject|BackedEnum> $class
-     *
-     * @throws InvalidPayloadException when the text is not valid JSON
+     * @throws InvalidPayloadException when a composite payload cannot be encoded
      */
-    private function decodeComposite(string $class, mixed $raw): mixed
+    private function toColumn(string $name, string $class, ValueObject|BackedEnum $valueObject): string|int|float|array
     {
-        if (!\is_string($raw) || $this->resolvedMapper->isScalarBacked($class) || is_subclass_of($class, BackedEnum::class)) {
-            return $raw;
-        }
-
-        try {
-            return json_decode($raw, true, flags: \JSON_THROW_ON_ERROR);
-        } catch (JsonException $invalidJson) {
-            throw new InvalidPayloadException(\sprintf('A %s payload is not valid JSON: %s', $class, $invalidJson->getMessage()), $invalidJson->getCode(), previous: $invalidJson);
-        }
-    }
-
-    /**
-     * @return string|int|float|array<string, scalar|null>|null
-     */
-    private function toColumn(string $name, ValueObject|BackedEnum|null $valueObject): string|int|float|array|null
-    {
-        if ($valueObject === null) {
-            return null;
-        }
-
         $payload = $this->resolvedMapper->toPayload($valueObject);
 
-        return \is_array($payload) && !$this->columnTakesArrays($name) ? json_encode($payload, \JSON_THROW_ON_ERROR) : $payload;
+        return \is_array($payload) && !$this->columnTakesArrays($name) ? CompositeJson::encode($class, $payload) : $payload;
     }
 
     private function columnTakesArrays(string $name): bool

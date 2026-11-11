@@ -9,7 +9,7 @@
   `null`/`''`/`[]`; with `skipOnEmpty => false`, `null` and `''` still pass (mirrors the Symfony bundle's validator).
 - Config check `supportsUntrusted()`, runtime `fromUntrustedPayload()` (core 72d0fc5).
 - Every `InvalidValueObjectException` (including `InvalidPayloadException` for wrong type/shape) becomes the
-  validation error. Unlike the Symfony validator, a non-string is not an exception: Yii's validators report wrong
+  validation error. A composite also comes as JSON text (what the behavior accepts on save). Unlike the Symfony validator, a non-string is not an exception: Yii's validators report wrong
   input types as errors (`StringValidator` does), and request data can be arrays.
 - Default message `BaseYii::t('yii', '{attribute} is invalid.')` — that string is in Yii's own message catalogue,
   so it is translated in every bundled language.
@@ -25,10 +25,17 @@
 - Trust: database reads use `ValueObjectMapper::fromPayload()`; a raw (non-instance) attribute on save is user
   input (`load()`/`setAttributes()`), so it goes through `supportsUntrusted()` + `fromUntrustedPayload()` and a class
   whose payload carries its own constraints (BoundedString) is refused with `InvalidPayloadException`.
-- Composite detection uses the mapper's `isScalarBacked()` plus a `BackedEnum` check: anything else holding a string
-  is JSON text and is decoded first. Invalid JSON becomes `InvalidPayloadException` with the `JsonException` as
+- Composite detection is the mapper's `isComposite()`: a string for a composite class is JSON text and is decoded
+  first (`Internal\CompositeJson`); a JSON scalar (`5`) is `InvalidPayloadException`. Invalid JSON becomes `InvalidPayloadException` with the `JsonException` as
   previous.
-- JSON is written with `json_encode(..., JSON_THROW_ON_ERROR)` — the same flags as the Doctrine package's
+- `attach()` also checks `$owner->hasAttribute($name)` (a typo is `InvalidConfigException`). For a db ActiveRecord
+  that loads the table schema at attach time, which `__set` would do anyway.
+- One default `ValueObjectMapper` is shared (static) by every behavior and validator without an own `mapper`.
+- Failed saves: the `ValueObjectAttributes` trait wraps `insert()`/`update()` in `try`/`finally` and calls each
+  attached behavior's `hydrate()`. A trait cannot be a `#[CoversClass]` target: tests use `#[CoversTrait]`, which
+  exists in PHPUnit 11 to 13.
+- JSON is written with `json_encode(..., JSON_THROW_ON_ERROR)` (a `JsonException`, e.g. invalid UTF-8 in a
+  `BoundedString`, becomes `InvalidPayloadException` with it as previous) — the same flags as the Doctrine package's
   `AbstractJsonVoType`, so the bytes match.
 
 ## Storage formats

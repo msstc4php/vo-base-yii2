@@ -56,11 +56,30 @@ Since core 72d0fc5: int payloads must be canonical digits (`"080"` is rejected, 
 payloads plain decimals, `DateRange` ISO 8601 with offset only. Form input like `"080"` is therefore a validation
 error, not silently 80.
 
-## A failed save leaves payloads in the model
+## A failed or vetoed save skips afterSave
 
-`beforeSave` dehydrates; `afterSave` re-hydrates. If the INSERT/UPDATE throws, or a later `beforeSave` handler sets
-`isValid = false`, `afterSave` never runs and the attributes keep their scalar/JSON payloads. Reload or discard the
-model after a failed save.
+`beforeSave` dehydrates; `afterSave` re-hydrates. When the INSERT/UPDATE throws (`IntegrityException`) or a later
+`beforeSave` handler sets `isValid = false`, `afterSave` never runs, so the model would keep the payloads. Fixed by
+the `ValueObjectAttributes` trait (`try`/`finally` around `insert()`/`update()`); without it, call the behavior's
+`hydrate()`. Covered by veto and unique-index tests.
+
+## Event order and `changedAttributes`
+
+The behavior's handlers run before any handler added with `on()` (behaviors attach first). `beforeSave` handlers
+after it see payloads; `afterSave` handlers see value objects, but `AfterSaveEvent::$changedAttributes` carries the
+old **payloads** (old attributes are dehydrated too, so the dirty comparison is by value).
+
+## bc-check needs the base tag's composer-ci.json
+
+Roave installs the base version via `Composer\Factory::createComposer(..., null, ..., $path)`, and a null config
+means `Factory::getComposerFile()`, i.e. `$COMPOSER` relative to the checkout. With `COMPOSER=composer-ci.json`
+(set on the step explicitly) the tag's `composer-ci.json`, which has the bower-asset stand-ins, is used. Not
+exercised yet: there is no tag.
+
+## A BoundedString as a safe attribute
+
+`load($post)` can put an array into a safe `BoundedString` attribute; the save then throws `InvalidPayloadException`
+(by design: raw input would choose its bounds). Keep such attributes unsafe and assign instances.
 
 ## `getDirtyAttributes()` compares instances outside `save()`
 

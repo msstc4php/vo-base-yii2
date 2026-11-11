@@ -2,6 +2,10 @@ deptrac:
   paths:
     - ./src
   layers:
+    - name: Internal
+      collectors:
+        - type: directory
+          value: src/Internal/.*
     - name: Validator
       collectors:
         - type: directory
@@ -11,7 +15,11 @@ deptrac:
         - type: directory
           value: src/Behavior/.*
   ruleset:
-    # Both depend on the core and Yii only; neither is declared as a layer. The
-    # validator (request input) and the behavior (storage) never see each other.
-    Validator: ~
-    Behavior: ~
+    # The core and Yii are not declared as layers. The validator (request input)
+    # and the behavior (storage) never see each other; Internal holds what both
+    # must agree on (the JSON form of a composite).
+    Internal: ~
+    Validator:
+      - Internal
+    Behavior:
+      - Internal

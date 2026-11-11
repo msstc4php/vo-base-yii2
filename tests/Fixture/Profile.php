@@ -11,7 +11,10 @@ use MSSTC4PHP\ValueObject\Primitive\BoundedString;
 use MSSTC4PHP\ValueObject\Primitive\IntRange;
 use MSSTC4PHP\ValueObject\Primitive\Percentage;
 use MSSTC4PHP\ValueObject\Primitive\PositiveInt;
+use MSSTC4PHP\ValueObject\Temporal\DateRange;
 use MSSTC4PHP\ValueObject\Yii2\Behavior\ValueObjectAttributeBehavior;
+use MSSTC4PHP\ValueObject\Yii2\Behavior\ValueObjectAttributes;
+use MSSTC4PHP\ValueObject\Yii2\Validator\ValueObjectValidator;
 use Override;
 use yii\db\ActiveRecord;
 use yii\db\Connection;
@@ -27,9 +30,12 @@ use yii\db\Connection;
  * @property HexColor|string|null $color
  * @property IntRange|string|null $range
  * @property BoundedString|string|null $label
+ * @property DateRange|string|null $period
  */
 final class Profile extends ActiveRecord
 {
+    use ValueObjectAttributes;
+
     public const array MAP = [
         'email' => EmailAddress::class,
         'age' => PositiveInt::class,
@@ -39,6 +45,7 @@ final class Profile extends ActiveRecord
         'color' => HexColor::class,
         'range' => IntRange::class,
         'label' => BoundedString::class,
+        'period' => DateRange::class,
     ];
 
     public static function createTable(Connection $db): void
@@ -54,13 +61,24 @@ final class Profile extends ActiveRecord
             'color' => 'string',
             'range' => 'text',
             'label' => 'text',
+            'period' => 'text',
         ])->execute();
+        $db->createCommand()->createIndex('profile_email', 'profile', 'email', true)->execute();
     }
 
     #[Override]
     public static function tableName(): string
     {
         return 'profile';
+    }
+
+    /**
+     * @return list<array{0: string, 1: class-string, valueObjectClass: class-string}>
+     */
+    #[Override]
+    public function rules(): array
+    {
+        return [['email', ValueObjectValidator::class, 'valueObjectClass' => EmailAddress::class]];
     }
 
     /**
