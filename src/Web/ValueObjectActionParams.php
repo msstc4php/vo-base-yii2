@@ -54,34 +54,61 @@ trait ValueObjectActionParams
      */
     private static function withValueObjects(ReflectionMethod $method, array $params): array
     {
+        $mapper = BaseYii::$container->get(ValueObjectMapper::class);
+        $missing = [];
         foreach ($method->getParameters() as $parameter) {
-            $class = self::valueObjectClassOf($parameter);
-            if ($class === null) {
-                continue;
-            }
-
             $name = $parameter->getName();
-            if (!\array_key_exists($name, $params)) {
-                // Yii would look for a service of that type and fail with a 500 for a value object.
-                if ($parameter->isDefaultValueAvailable()) {
-                    $params[$name] = $parameter->getDefaultValue();
-                } elseif (!$parameter->allowsNull()) {
-                    throw new BadRequestHttpException(BaseYii::t('yii', 'Missing required parameters: {params}', ['params' => $name]));
+            $class = self::valueObjectClassOf($parameter, $mapper);
+            if ($class === null) {
+                if (!\array_key_exists($name, $params) && !$parameter->isDefaultValueAvailable() && self::isMissingForYii($parameter)) {
+                    $missing[] = $name;
                 }
 
                 continue;
             }
 
-            $params[$name] = self::bindValueObject($parameter, $class, $params[$name]);
+            $present = \array_key_exists($name, $params);
+            if (!$present || !$params[$name] instanceof $class) {
+                self::assertBindable($name, $class, $mapper);
+            }
+
+            if (!$present) {
+                // Yii would look for a service of that type and fail with a 500 for a value object.
+                if ($parameter->isDefaultValueAvailable()) {
+                    $params[$name] = $parameter->getDefaultValue();
+                } elseif ($parameter->allowsNull()) {
+                    $params[$name] = null;
+                } else {
+                    $missing[] = $name;
+                }
+
+                continue;
+            }
+
+            $params[$name] = self::bindValueObject($parameter, $class, $params[$name], $mapper);
+        }
+
+        if ($missing !== []) {
+            throw new BadRequestHttpException(BaseYii::t('yii', 'Missing required parameters: {params}', ['params' => implode(', ', $missing)]));
         }
 
         return $params;
     }
 
     /**
+     * Whether Yii reports the absent parameter as missing (a named class type is a service lookup instead).
+     */
+    private static function isMissingForYii(ReflectionParameter $parameter): bool
+    {
+        $type = $parameter->getType();
+
+        return !$type instanceof ReflectionNamedType || $type->isBuiltin();
+    }
+
+    /**
      * @return class-string|null the class of a single named, non-builtin parameter type the mapper supports
      */
-    private static function valueObjectClassOf(ReflectionParameter $parameter): ?string
+    private static function valueObjectClassOf(ReflectionParameter $parameter, ValueObjectMapper $mapper): ?string
     {
         $type = $parameter->getType();
         if (!$type instanceof ReflectionNamedType || $type->isBuiltin()) {
@@ -90,24 +117,31 @@ trait ValueObjectActionParams
 
         $class = $type->getName();
 
-        return class_exists($class) && self::actionParamMapper()->supports($class) ? $class : null;
+        return class_exists($class) && $mapper->supports($class) ? $class : null;
+    }
+
+    /**
+     * @param class-string $class
+     *
+     * @throws LogicException when a request cannot become a $class
+     */
+    private static function assertBindable(string $name, string $class, ValueObjectMapper $mapper): void
+    {
+        if ($mapper->isComposite($class) || !$mapper->supportsUntrusted($class)) {
+            throw new LogicException(\sprintf('Action parameter $%s cannot be typed %s: %s. Type it as a scalar-backed value object or a backed enum, or take a string and convert it yourself.', $name, $class, $mapper->supportsUntrusted($class) ? 'a composite cannot be read from a single route or query parameter' : 'its payload carries its own constraints, so a request would choose them'));
+        }
     }
 
     /**
      * @param class-string $class
      */
-    private static function bindValueObject(ReflectionParameter $parameter, string $class, mixed $value): mixed
+    private static function bindValueObject(ReflectionParameter $parameter, string $class, mixed $value, ValueObjectMapper $mapper): mixed
     {
         if ($value instanceof $class) {
             return $value;
         }
 
-        $mapper = self::actionParamMapper();
         $name = $parameter->getName();
-        if ($mapper->isComposite($class) || !$mapper->supportsUntrusted($class)) {
-            throw new LogicException(\sprintf('Action parameter $%s cannot be typed %s: %s. Type it as a scalar-backed value object or a backed enum, or take a string and convert it yourself.', $name, $class, $mapper->supportsUntrusted($class) ? 'a composite cannot be read from a single route or query parameter' : 'its payload carries its own constraints, so a request would choose them'));
-        }
-
         if ($value === null || $value === '') {
             return $parameter->allowsNull() ? null : throw self::invalidParameter($name, $class);
         }
@@ -125,10 +159,5 @@ trait ValueObjectActionParams
     private static function invalidParameter(string $name, string $class): NotFoundHttpException
     {
         return new NotFoundHttpException(\sprintf('The "%s" parameter is not a valid %s.', $name, TypeLabel::of($class)));
-    }
-
-    private static function actionParamMapper(): ValueObjectMapper
-    {
-        return BaseYii::$container->get(ValueObjectMapper::class);
     }
 }

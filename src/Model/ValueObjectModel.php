@@ -86,9 +86,9 @@ trait ValueObjectModel
 
     private function convertAttribute(string $attribute, ValueObjectValidator $validator): ValueObject|BackedEnum|null
     {
-        $class = $validator->valueObjectClass;
+        $class = $validator->valueObjectClass ?? throw new LogicException(\sprintf('The %s rule for "%s" in %s has no valueObjectClass.', ValueObjectValidator::class, $attribute, static::class));
         $value = $this->getAttributes([$attribute])[$attribute] ?? null;
-        if ($class === null || $value === null || $value === '') {
+        if ($value === null || $value === '') {
             return null;
         }
 

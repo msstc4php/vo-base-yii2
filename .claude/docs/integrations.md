@@ -27,8 +27,9 @@
   `bindInjectedParams()` (DI) before defaults and the missing-parameter list are consulted.
 - Input goes through `fromUntrustedPayload()`; invalid, including arrays, is `NotFoundHttpException`. The message uses
   `Internal\TypeLabel`. Nullable: `null`/`''` -> `null`; non-nullable `''`/`null` -> 404.
-- Supported but unbindable (`!supportsUntrusted()` or `isComposite()`) and present as a non-instance:
-  `LogicException` naming the parameter. An instance passes through before that check.
+- Supported but unbindable (`!supportsUntrusted()` or `isComposite()`): `LogicException` naming the parameter, present
+  or absent. Only a present instance passes through before that check.
+- The mapper is resolved once per `bindActionParams()` call.
 - Mapper: `BaseYii::$container->get(ValueObjectMapper::class)`.
 
 ## Yii 2 model — `Model\ValueObjectModel`

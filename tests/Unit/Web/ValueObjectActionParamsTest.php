@@ -8,6 +8,7 @@ use LogicException;
 use MSSTC4PHP\ValueObject\Identity\EmailAddress;
 use MSSTC4PHP\ValueObject\Primitive\IntRange;
 use MSSTC4PHP\ValueObject\Yii2\Internal\TypeLabel;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Level;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Web\ProfileController;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Support\YiiApplication;
@@ -80,6 +81,32 @@ final class ValueObjectActionParamsTest extends TestCase
         self::assertSame(Priority::High, $this->runOn('priority', ['priority' => '2']));
         $this->expectException(NotFoundHttpException::class);
         $this->runOn('priority', ['priority' => 'bogus']);
+    }
+
+    public function testStringBackedEnumIsConverted(): void
+    {
+        self::assertSame(Level::High, $this->runOn('level', ['level' => 'high']));
+        $this->expectException(NotFoundHttpException::class);
+        $this->runOn('level', ['level' => 'bogus']);
+    }
+
+    public function testAbsentUnbindableParametersAreProgrammerErrors(): void
+    {
+        foreach (['absent-composite', 'absent-trusted'] as $action) {
+            try {
+                $this->runOn($action, []);
+                self::fail('Expected LogicException for ' . $action);
+            } catch (LogicException $error) {
+                self::assertStringContainsString('cannot be typed', $error->getMessage());
+            }
+        }
+    }
+
+    public function testEveryMissingParameterIsListed(): void
+    {
+        $this->expectException(BadRequestHttpException::class);
+        $this->expectExceptionMessage('Missing required parameters: name, email');
+        $this->runOn('mixed', []);
     }
 
     public function testNullableAbsentIsNull(): void

@@ -7,6 +7,7 @@ namespace MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Web;
 use MSSTC4PHP\ValueObject\Identity\EmailAddress;
 use MSSTC4PHP\ValueObject\Primitive\BoundedString;
 use MSSTC4PHP\ValueObject\Primitive\IntRange;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Level;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
 use MSSTC4PHP\ValueObject\Yii2\Web\ValueObjectActionParams;
 use Override;
@@ -66,6 +67,21 @@ final class ProfileController extends Controller
     public function actionComposite(IntRange $range): IntRange
     {
         return $range;
+    }
+
+    public function actionLevel(Level $level): Level
+    {
+        return $level;
+    }
+
+    public function actionAbsentComposite(IntRange $range): IntRange
+    {
+        return $range;
+    }
+
+    public function actionAbsentTrusted(?BoundedString $label): ?BoundedString
+    {
+        return $label;
     }
 
     public function actionMixed(string $name, ?Priority $priority, EmailAddress $email): string

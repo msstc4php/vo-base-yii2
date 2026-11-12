@@ -61,6 +61,7 @@ public function rules(): array
 ## Action parameters
 
 ```php
+use App\Priority;
 use MSSTC4PHP\ValueObject\Identity\EmailAddress;
 use MSSTC4PHP\ValueObject\Yii2\Web\ValueObjectActionParams;
 use yii\web\Controller;
@@ -69,9 +70,10 @@ final class UserController extends Controller
 {
     use ValueObjectActionParams;
 
-    public function actionView(EmailAddress $email, ?Priority $priority): array
+    public function actionView(EmailAddress $email, ?Priority $priority): string
     {
         // $email is an EmailAddress; /user/view?email=nope is a 404, not a TypeError
+        return $email->domain();
     }
 }
 ```
@@ -85,17 +87,20 @@ parameter and PHP throws a `TypeError` (500).
 - Invalid input, including an array (`?email[]=x`), is a `NotFoundHttpException` (404) whose message names the type as
   words ("email address"), never a class.
 - `?EmailAddress`: an absent, `null` or `''` parameter is `null`. A non-nullable parameter that is absent is Yii's
-  400 "Missing required parameters", an empty one is a 404; a default value is used when the parameter is absent.
+  400 "Missing required parameters" (listing every missing parameter), an empty one is a 404; a default value is used
+  when the parameter is absent.
 - An argument that already is an instance (set by your code or a filter) passes through untouched. Union and
   intersection types are left to Yii.
 - A parameter typed with a class that cannot be bound, `BoundedString` (its payload carries its own bounds) or a
-  composite such as `IntRange` (a URL segment cannot carry one), is a `LogicException` naming the parameter: a
-  programming error found on the first request, never the raw string reaching the typed parameter.
+  composite such as `IntRange` (a URL segment cannot carry one), is a `LogicException` naming the parameter whether
+  the request carries it or not: a programming error found on the first request, never the raw string reaching the typed parameter.
 - The mapper is `Yii::$container->get(ValueObjectMapper::class)`; define it in the container to add codecs.
 
 ## Model values
 
 ```php
+use MSSTC4PHP\ValueObject\Identity\EmailAddress;
+use MSSTC4PHP\ValueObject\Primitive\IntRange;
 use MSSTC4PHP\ValueObject\Yii2\Model\ValueObjectModel;
 use MSSTC4PHP\ValueObject\Yii2\Validator\ValueObjectValidator;
 use yii\base\Model;

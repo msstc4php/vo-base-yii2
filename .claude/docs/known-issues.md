@@ -105,8 +105,8 @@ compares payloads and writes nothing. `isAttributeChanged()` has the same instan
 `web\Controller::bindActionParams()` sends a parameter that is absent from `$params` and has a non-builtin type to
 `bindInjectedParams()`, which throws and becomes `ServerErrorHttpException` ("Could not load required service") for a
 non-nullable value object; the "Missing required parameters" 400 is only for builtin types. `ValueObjectActionParams`
-therefore throws the 400 itself for such a parameter (and applies a declared default), so a missing query parameter is
-a client error. A nullable one is `null` through the same Yii path.
+therefore throws the 400 itself, listing every missing parameter (value objects and builtin ones; Yii's own check
+never runs after it), applies a declared default, and sets an absent nullable one to `null` directly.
 
 ## Rector adds `array` to the `bindActionParams` override
 
