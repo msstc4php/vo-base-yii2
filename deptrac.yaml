@@ -14,12 +14,26 @@ deptrac:
       collectors:
         - type: directory
           value: src/Behavior/.*
+    - name: Web
+      collectors:
+        - type: directory
+          value: src/Web/.*
+    - name: Model
+      collectors:
+        - type: directory
+          value: src/Model/.*
   ruleset:
     # The core and Yii are not declared as layers. The validator (request input)
-    # and the behavior (storage) never see each other; Internal holds what both
-    # must agree on (the JSON form of a composite).
+    # and the behavior (storage) never see each other; Internal holds what they
+    # must agree on (the JSON form of a composite, the client-facing type label).
+    # Model reads what the validator rule declares.
     Internal: ~
     Validator:
       - Internal
     Behavior:
       - Internal
+    Web:
+      - Internal
+    Model:
+      - Internal
+      - Validator
