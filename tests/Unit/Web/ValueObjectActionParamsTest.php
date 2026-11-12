@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MSSTC4PHP\ValueObject\Yii2\Tests\Unit\Web;
 
 use LogicException;
+use MSSTC4PHP\ValueObject\Exception\InvalidValueObjectException;
 use MSSTC4PHP\ValueObject\Identity\EmailAddress;
 use MSSTC4PHP\ValueObject\Primitive\IntRange;
 use MSSTC4PHP\ValueObject\Yii2\Internal\TypeLabel;
@@ -62,6 +63,16 @@ final class ValueObjectActionParamsTest extends TestCase
     {
         $this->expectException(NotFoundHttpException::class);
         $this->runOn('view', ['email' => $value]);
+    }
+
+    public function testNotFoundChainsTheValueObjectsException(): void
+    {
+        try {
+            $this->runOn('view', ['email' => 'nope']);
+            self::fail('Expected NotFoundHttpException.');
+        } catch (NotFoundHttpException $notFound) {
+            self::assertInstanceOf(InvalidValueObjectException::class, $notFound->getPrevious());
+        }
     }
 
     public function testNotFoundMessageNamesNoClass(): void

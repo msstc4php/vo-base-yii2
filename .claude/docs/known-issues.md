@@ -114,6 +114,23 @@ never runs after it), applies a declared default, and sets an absent nullable on
 has no native parameter types, so `array $params` is an incompatible override (fatal at load). The trait keeps the
 parameters untyped and does the array work in a private static helper with a typed signature.
 
+## Every invalid action parameter is a 404
+
+Arrays (`?email[]=x`) and `''` on a non-nullable parameter are 404 like any malformed value, not 400. Symfony parity:
+the route does not exist for that value. The `InvalidValueObjectException` is chained as the exception's previous.
+
+## `[]` passes a rule and `when` skips it
+
+`Validator::isEmpty()` treats `[]` as empty, so with the default `skipOnEmpty` the attribute passes `validate()` unchecked,
+as does one whose `when` is false. `ValueObjectModel` therefore returns `null` for such attributes instead of converting
+(converting would throw a LogicException, a 500 on client input).
+
+## One mapper source
+
+The validator falls back to `Yii::$container->get(ValueObjectMapper::class)` (0.1.0 used a private static default) and
+exposes `resolvedMapper()`; the model trait uses it, so rule and conversion share one mapper. A container singleton
+overrides the codecs for all three entry points.
+
 ## Local quirks
 
 - Infection's GitHub logger (enabled by the template `infection.json5`) fails with "cannot be made relative to the

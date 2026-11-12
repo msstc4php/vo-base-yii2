@@ -37,7 +37,7 @@ final class ValueObjectValidator extends Validator
     public ?string $valueObjectClass = null;
 
     /**
-     * Pass one built with your own codecs to validate a custom composite.
+     * Pass one built with your own codecs to validate a custom composite, or define it in the container.
      */
     public ?ValueObjectMapper $mapper = null;
 
@@ -50,8 +50,6 @@ final class ValueObjectValidator extends Validator
 
     private string $errorMessage;
 
-    private static ?ValueObjectMapper $defaultMapper = null;
-
     /**
      * @throws InvalidConfigException when valueObjectClass is missing, unsupported, or not safe to build from user input
      */
@@ -60,7 +58,7 @@ final class ValueObjectValidator extends Validator
     {
         parent::init();
 
-        $this->resolvedMapper = $this->mapper ?? self::$defaultMapper ??= new ValueObjectMapper();
+        $this->resolvedMapper = $this->mapper ?? BaseYii::$container->get(ValueObjectMapper::class);
         $class = $this->valueObjectClass;
         if ($class === null || !$this->resolvedMapper->supports($class)) {
             throw new InvalidConfigException(\sprintf('%s::$valueObjectClass must name a value object class the payload mapper supports, %s given.', self::class, $class ?? 'null'));
@@ -73,6 +71,15 @@ final class ValueObjectValidator extends Validator
 
         $this->class = $class;
         $this->errorMessage = $this->message ?? BaseYii::t('yii', '{attribute} is invalid.');
+    }
+
+    /**
+     * The mapper this rule validates with: its own, else the container's, so a rule and
+     * the conversion of a validated value agree.
+     */
+    public function resolvedMapper(): ValueObjectMapper
+    {
+        return $this->resolvedMapper;
     }
 
     /**

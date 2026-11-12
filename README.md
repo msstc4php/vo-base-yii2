@@ -93,8 +93,11 @@ parameter and PHP throws a `TypeError` (500).
   intersection types are left to Yii.
 - A parameter typed with a class that cannot be bound, `BoundedString` (its payload carries its own bounds) or a
   composite such as `IntRange` (a URL segment cannot carry one), is a `LogicException` naming the parameter whether
-  the request carries it or not: a programming error found on the first request, never the raw string reaching the typed parameter.
-- The mapper is `Yii::$container->get(ValueObjectMapper::class)`; define it in the container to add codecs.
+  the request carries it or not: a programming error found on the first request, never the raw string reaching the
+  typed parameter.
+- Invalid values are always a 404, arrays and `''` on a non-nullable parameter included: as in Symfony, the route
+  does not exist for that value.
+- The mapper is `Yii::$container->get(ValueObjectMapper::class)`; see "Custom codecs" below to add codecs.
 
 ## Model values
 
@@ -135,8 +138,20 @@ $all = $form->valueObjects();           // ['email' => EmailAddress|null, 'range
 - The class (and the `mapper` option, if given) comes from the attribute's `ValueObjectValidator` rule, so the rule and
   the conversion cannot disagree; a composite may come as its payload array or as JSON text.
 - A `null` or `''` attribute gives `null`; an attribute already holding the value object gives it back.
+- An attribute the rule did not check, because it is empty for the rule (`skipOnEmpty`, so `[]` too) or its `when`
+  condition is false, gives `null`: unvalidated input is never converted.
+- `valueObject('email', EmailAddress::class)` asserts the rule's class and types the result.
 - Call it after `validate()`. A model with errors, an attribute without such a rule, or a value that does not convert
   is a `LogicException`.
+
+## Custom codecs
+
+The validator, the model trait and the action parameters all use the mapper from the container unless a rule gives
+its own `mapper`. Define it once, with your codecs, as a singleton:
+
+```php
+Yii::$container->setSingleton(ValueObjectMapper::class, static fn (): ValueObjectMapper => new ValueObjectMapper([new SizeCodec()]));
+```
 
 ## ActiveRecord behavior
 

@@ -8,11 +8,9 @@ use BackedEnum;
 use LogicException;
 use MSSTC4PHP\ValueObject\Contract\ValueObject;
 use MSSTC4PHP\ValueObject\Exception\InvalidValueObjectException;
-use MSSTC4PHP\ValueObject\Payload\ValueObjectMapper;
 use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
 use MSSTC4PHP\ValueObject\Yii2\Validator\ValueObjectValidator;
 use yii\base\Model;
-use yii\BaseYii;
 
 /**
  * Reads the validated attributes of a form or REST model as value objects. The class
@@ -20,23 +18,35 @@ use yii\BaseYii;
  * conversion cannot disagree. Call it after `validate()`: a model with errors, an
  * attribute without the rule, or a value that does not convert is a LogicException.
  *
+ * An attribute the rule did not check, because it is empty for the rule (`skipOnEmpty`,
+ * so `[]` too) or its `when` condition is false, is `null`: unvalidated input is never converted.
+ *
  * @phpstan-require-extends Model
  */
 trait ValueObjectModel
 {
     /**
-     * @return ValueObject|BackedEnum|null null for a null or empty attribute
+     * @template T of object
      *
-     * @throws LogicException when the model has errors, the attribute has no ValueObjectValidator rule, or its value does not convert
+     * @param class-string<T>|null $class asserts the rule's class, so the result is typed
+     *
+     * @return ($class is null ? ValueObject|BackedEnum|null : T|null) null for an empty or unchecked attribute
+     *
+     * @throws LogicException when the model has errors, the attribute has no ValueObjectValidator rule for $class, or its value does not convert
      */
-    public function valueObject(string $attribute): ?object
+    public function valueObject(string $attribute, ?string $class = null): ?object
     {
         $this->assertWithoutErrors();
         $validator = $this->valueObjectValidatorOf($attribute);
+        if (!$validator instanceof ValueObjectValidator) {
+            throw new LogicException(\sprintf('Attribute "%s" has no %s rule in %s::rules().', $attribute, ValueObjectValidator::class, static::class));
+        }
 
-        return $validator instanceof ValueObjectValidator
-            ? $this->convertAttribute($attribute, $validator)
-            : throw new LogicException(\sprintf('Attribute "%s" has no %s rule in %s::rules().', $attribute, ValueObjectValidator::class, static::class));
+        if ($class !== null && !is_a($validator->valueObjectClass ?? '', $class, true)) {
+            throw new LogicException(\sprintf('Attribute "%s" of %s is validated as %s, not %s.', $attribute, static::class, $validator->valueObjectClass ?? 'nothing', $class));
+        }
+
+        return $this->convertAttribute($attribute, $validator);
     }
 
     /**
@@ -87,8 +97,10 @@ trait ValueObjectModel
     private function convertAttribute(string $attribute, ValueObjectValidator $validator): ValueObject|BackedEnum|null
     {
         $class = $validator->valueObjectClass ?? throw new LogicException(\sprintf('The %s rule for "%s" in %s has no valueObjectClass.', ValueObjectValidator::class, $attribute, static::class));
-        $value = $this->getAttributes([$attribute])[$attribute] ?? null;
-        if ($value === null || $value === '') {
+        // Reason: validators read the attribute the same way, which also covers getter/setter attributes.
+        // @phpstan-ignore property.dynamicName
+        $value = $this->{$attribute};
+        if ($value === null || $value === '' || $this->valueObjectRuleSkipped($validator, $attribute, $value)) {
             return null;
         }
 
@@ -96,7 +108,7 @@ trait ValueObjectModel
             return $value;
         }
 
-        $mapper = $validator->mapper ?? BaseYii::$container->get(ValueObjectMapper::class);
+        $mapper = $validator->resolvedMapper();
 
         try {
             $payload = \is_string($value) && $mapper->isComposite($class) ? CompositeJson::decode($class, $value) : $value;
@@ -105,5 +117,14 @@ trait ValueObjectModel
         } catch (InvalidValueObjectException $invalid) {
             throw new LogicException(\sprintf('Attribute "%s" of %s does not hold a valid value: was validate() called?', $attribute, static::class), 0, $invalid);
         }
+    }
+
+    private function valueObjectRuleSkipped(ValueObjectValidator $validator, string $attribute, mixed $value): bool
+    {
+        if ($validator->skipOnEmpty && $validator->isEmpty($value)) {
+            return true;
+        }
+
+        return $validator->when !== null && !(bool) \call_user_func($validator->when, $this, $attribute);
     }
 }

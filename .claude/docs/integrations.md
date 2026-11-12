@@ -57,7 +57,7 @@
 - The first `hydrateFromStorage()`/`dehydrate()` checks `$owner->hasAttribute($name)` once per behavior (a typo is
   `InvalidConfigException`); not at attach, which would load the schema for every new model.
 - The trait also overrides `updateAttributes()`, which bypasses the save events.
-- One default `ValueObjectMapper` is shared (static) by every behavior and validator without an own `mapper`.
+- One default `ValueObjectMapper` is shared (static) by every behavior without an own `mapper` (validators use the container's).
 - Failed saves: the `ValueObjectAttributes` trait wraps `insert()`/`update()` in `try`/`finally` and calls each
   attached behavior's `hydrate()`. A trait cannot be a `#[CoversClass]` target: tests use `#[CoversTrait]`, which
   exists in PHPUnit 11 to 13.

@@ -12,6 +12,7 @@ use Override;
 use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionParameter;
+use Throwable;
 use yii\base\InlineAction;
 use yii\BaseYii;
 use yii\web\BadRequestHttpException;
@@ -148,16 +149,16 @@ trait ValueObjectActionParams
 
         try {
             return $mapper->fromUntrustedPayload($class, $value);
-        } catch (InvalidValueObjectException) {
-            throw self::invalidParameter($name, $class);
+        } catch (InvalidValueObjectException $invalid) {
+            throw self::invalidParameter($name, $class, $invalid);
         }
     }
 
     /**
      * @param class-string $class
      */
-    private static function invalidParameter(string $name, string $class): NotFoundHttpException
+    private static function invalidParameter(string $name, string $class, ?Throwable $previous = null): NotFoundHttpException
     {
-        return new NotFoundHttpException(\sprintf('The "%s" parameter is not a valid %s.', $name, TypeLabel::of($class)));
+        return new NotFoundHttpException(\sprintf('The "%s" parameter is not a valid %s.', $name, TypeLabel::of($class)), 0, $previous);
     }
 }

@@ -11,6 +11,8 @@ use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Web\SignupController;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Support\YiiApplication;
 use MSSTC4PHP\ValueObject\Yii2\Validator\ValueObjectValidator;
 use MSSTC4PHP\ValueObject\Yii2\Web\ValueObjectActionParams;
+use PHPUnit\Framework\Attributes\After;
+use PHPUnit\Framework\Attributes\Before;
 use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\Attributes\UsesTrait;
@@ -28,6 +30,8 @@ use yii\web\Response;
 final class ValueObjectActionParamsWebTest extends TestCase
 {
     use YiiApplication;
+
+    private ?string $requestMethod = null;
 
     public function testValidRouteValueReachesTheAction(): void
     {
@@ -69,6 +73,23 @@ final class ValueObjectActionParamsWebTest extends TestCase
 
         self::assertSame(200, $response->getStatusCode());
         self::assertSame('ann@example.com', $response->data);
+    }
+
+    #[Before]
+    protected function rememberRequestMethod(): void
+    {
+        $method = $_SERVER['REQUEST_METHOD'] ?? null;
+        $this->requestMethod = \is_string($method) ? $method : null;
+    }
+
+    #[After]
+    protected function restoreRequestMethod(): void
+    {
+        if ($this->requestMethod === null) {
+            unset($_SERVER['REQUEST_METHOD']);
+        } else {
+            $_SERVER['REQUEST_METHOD'] = $this->requestMethod;
+        }
     }
 
     private function webApplication(): Application
