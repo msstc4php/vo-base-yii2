@@ -68,6 +68,11 @@ final class ProfileController extends Controller
         return $range;
     }
 
+    public function actionMixed(string $name, ?Priority $priority, EmailAddress $email): string
+    {
+        return $name . ($priority->name ?? '-') . $email;
+    }
+
     public function actionPlain(string $name, int $page = 1): string
     {
         return $name . $page;

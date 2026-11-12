@@ -1,11 +1,15 @@
 # Architecture
 
-Three layers in `deptrac.yaml`; `Validator` and `Behavior` never see each other, both may use `Internal`:
+Five layers in `deptrac.yaml`; `Validator` and `Behavior` never see each other, `Web` and `Behavior` neither; `Internal` is usable by all, `Model` also reads `Validator`:
 
 - **`Validator/`** — `ValueObjectValidator`, the request-input path.
 - **`Behavior/`** — `ValueObjectAttributeBehavior` (the storage path) and the `ValueObjectAttributes` trait for the
   model (restores value objects after a failed/vetoed save).
-- **`Internal/`** — `CompositeJson` (`@internal`): decode/encode of a composite's JSON text, so the validator accepts
+- **`Web/`** — `ValueObjectActionParams`, controller trait (route/query parameter -> typed action argument).
+- **`Model/`** — `ValueObjectModel`, model trait reading validated attributes as value objects; the only consumer of
+  `Validator` (it takes the class and mapper from the rule).
+- **`Internal/`** — `TypeLabel` (`@internal`, "email address" from `EmailAddress`; same algorithm as the Laravel
+  rule's `typeLabel()`, one copy per package) and `CompositeJson` (`@internal`): decode/encode of a composite's JSON text, so the validator accepts
   exactly what the behavior accepts on save, and both report JSON errors as `InvalidPayloadException`.
 
 The core and Yii are not declared as layers, so they do not appear in the ruleset. Both areas call the core's

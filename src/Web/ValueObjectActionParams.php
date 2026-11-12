@@ -105,7 +105,7 @@ trait ValueObjectActionParams
         $mapper = self::actionParamMapper();
         $name = $parameter->getName();
         if ($mapper->isComposite($class) || !$mapper->supportsUntrusted($class)) {
-            throw new LogicException(\sprintf('Action parameter $%s cannot be typed %s: %s. Type it as a scalar-backed value object or a backed enum, or take a string and convert it yourself.', $name, $class, $mapper->isComposite($class) ? 'a composite cannot be read from a single route or query parameter' : 'its payload carries its own constraints, so a request would choose them'));
+            throw new LogicException(\sprintf('Action parameter $%s cannot be typed %s: %s. Type it as a scalar-backed value object or a backed enum, or take a string and convert it yourself.', $name, $class, $mapper->supportsUntrusted($class) ? 'a composite cannot be read from a single route or query parameter' : 'its payload carries its own constraints, so a request would choose them'));
         }
 
         if ($value === null || $value === '') {

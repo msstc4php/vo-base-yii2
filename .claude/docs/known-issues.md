@@ -100,6 +100,20 @@ name => value pairs, dehydrates, calls the parent with names only, restores in `
 Outside `save()` an equal value object assigned anew shows as dirty (Yii compares with `!==`); `save()` itself
 compares payloads and writes nothing. `isAttributeChanged()` has the same instance semantics.
 
+## An absent value-object action parameter is a 500 in Yii itself
+
+`web\Controller::bindActionParams()` sends a parameter that is absent from `$params` and has a non-builtin type to
+`bindInjectedParams()`, which throws and becomes `ServerErrorHttpException` ("Could not load required service") for a
+non-nullable value object; the "Missing required parameters" 400 is only for builtin types. `ValueObjectActionParams`
+therefore throws the 400 itself for such a parameter (and applies a declared default), so a missing query parameter is
+a client error. A nullable one is `null` through the same Yii path.
+
+## Rector adds `array` to the `bindActionParams` override
+
+`StrictArrayParamDimFetchRector` types a parameter that is used as `$params[$name]`; `web\Controller::bindActionParams()`
+has no native parameter types, so `array $params` is an incompatible override (fatal at load). The trait keeps the
+parameters untyped and does the array work in a private static helper with a typed signature.
+
 ## Local quirks
 
 - Infection's GitHub logger (enabled by the template `infection.json5`) fails with "cannot be made relative to the

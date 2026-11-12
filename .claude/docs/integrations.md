@@ -16,6 +16,30 @@
   so it is translated in every bundled language.
 - `clientValidateAttribute()` is the base one, returning null: no client-side validation.
 
+## Yii 2 controller — `Web\ValueObjectActionParams`
+
+- Overrides the public `web\Controller::bindActionParams($action, $params)`: reflects `InlineAction::$actionMethod`
+  on the controller, or `run()` on a standalone action, converts the entries of `$params` whose parameter has a single
+  named, non-builtin type the mapper supports, then calls `parent::bindActionParams()`. `EVENT_BEFORE_ACTION` cannot
+  change arguments, hence the override.
+- Yii's own binder (2.0.55 .. current) passes a class-typed parameter's scalar through unchanged (PHP then throws a
+  `TypeError`) and an object through untouched; a parameter absent from `$params` with a non-builtin type goes to
+  `bindInjectedParams()` (DI) before defaults and the missing-parameter list are consulted.
+- Input goes through `fromUntrustedPayload()`; invalid, including arrays, is `NotFoundHttpException`. The message uses
+  `Internal\TypeLabel`. Nullable: `null`/`''` -> `null`; non-nullable `''`/`null` -> 404.
+- Supported but unbindable (`!supportsUntrusted()` or `isComposite()`) and present as a non-instance:
+  `LogicException` naming the parameter. An instance passes through before that check.
+- Mapper: `BaseYii::$container->get(ValueObjectMapper::class)`.
+
+## Yii 2 model — `Model\ValueObjectModel`
+
+- `valueObject($attribute)`: `hasErrors()` -> `LogicException`; the attribute's first active `ValueObjectValidator`
+  (`getActiveValidators($attribute)`, so scenario-aware) gives `valueObjectClass` and `mapper`, else the container's
+  mapper. `valueObjects()` walks every active `ValueObjectValidator` and its `getAttributeNames()`.
+- Value read through `getAttributes([$attribute])`; null/`''` -> null; instance -> as is; a composite string is decoded
+  with `Internal\CompositeJson`; `InvalidValueObjectException` -> `LogicException` ("was validate() called?").
+- Returning a model with errors from a REST action gives 422 (`rest\Serializer::serializeModelErrors`).
+
 ## Yii 2 ActiveRecord — `Behavior\ValueObjectAttributeBehavior`
 
 - `attach()` rejects a non-`BaseActiveRecord` owner and any map entry whose class `ValueObjectMapper::supports()`

@@ -133,17 +133,24 @@ final class ValueObjectActionParamsTest extends TestCase
         self::assertSame('ann7', $this->runOn('plain', ['name' => 'ann', 'page' => '7']));
     }
 
+    public function testParametersAfterUnconvertedOnesAreStillBound(): void
+    {
+        self::assertSame('ann-user@example.com', $this->runOn('mixed', ['name' => 'ann', 'email' => 'user@example.com']));
+        self::assertSame('annHighuser@example.com', $this->runOn('mixed', ['name' => 'ann', 'priority' => '2', 'email' => 'user@example.com']));
+    }
+
     public function testTrustedSourceOnlyClassIsAProgrammerError(): void
     {
         $this->expectException(LogicException::class);
-        $this->expectExceptionMessage('$label');
+        $this->expectExceptionMessage('$label cannot be typed');
+        $this->expectExceptionMessage('own constraints');
         $this->runOn('trusted', ['label' => 'x']);
     }
 
     public function testCompositeIsAProgrammerError(): void
     {
         $this->expectException(LogicException::class);
-        $this->expectExceptionMessage('$range');
+        $this->expectExceptionMessage('composite');
         $this->runOn('composite', ['range' => '1-5']);
     }
 

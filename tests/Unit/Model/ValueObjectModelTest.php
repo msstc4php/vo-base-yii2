@@ -7,6 +7,7 @@ namespace MSSTC4PHP\ValueObject\Yii2\Tests\Unit\Model;
 use LogicException;
 use MSSTC4PHP\ValueObject\Identity\EmailAddress;
 use MSSTC4PHP\ValueObject\Primitive\IntRange;
+use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
 use MSSTC4PHP\ValueObject\Yii2\Model\ValueObjectModel;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\ContactForm;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
@@ -19,6 +20,7 @@ use PHPUnit\Framework\TestCase;
 
 #[CoversTrait(ValueObjectModel::class)]
 #[UsesClass(ValueObjectValidator::class)]
+#[UsesClass(CompositeJson::class)]
 final class ValueObjectModelTest extends TestCase
 {
     use YiiApplication;

@@ -27,3 +27,9 @@ autoloadable (an application requires it from its entry script), so PHPStan cann
   is fast enough for that suite. `tests/Integration` is empty, as in the Doctrine package.
 - "No UPDATE issued" is asserted through `update()` returning 0: `updateInternal()` returns 0 only when no dirty
   attributes remain (an UPDATE on SQLite reports 1 matched row even when nothing changed).
+
+## Web and model tests
+
+`Tests\Fixture\Web\ProfileController` (trait on `yii\web\Controller`, CSRF off, one action per case, a standalone
+`ViewEmailAction`) is driven with `runAction()` under the console application; `Tests\Fixture\ContactForm` is the
+form model. `TestCase::run()` is final: the helper is named `runOn()`.

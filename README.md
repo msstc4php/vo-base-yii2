@@ -1,7 +1,8 @@
 # msstc4php/vo-base-yii2
 
-Yii 2 glue for [`msstc4php/vo-base`][core]: a validator that asks the value object whether input is valid, and an
-ActiveRecord behavior that keeps value objects in your model and scalars in your database.
+Yii 2 glue for [`msstc4php/vo-base`][core]: a validator that asks the value object whether input is valid, action
+parameters and model attributes that arrive as value objects, and an ActiveRecord behavior that keeps value objects in
+your model and scalars in your database.
 
 Requires PHP >= 8.4 and `yiisoft/yii2` `^2.0.55` (Composer blocks earlier 2.0.x releases on security advisories).
 
@@ -16,7 +17,7 @@ Neither this package nor the core is on Packagist yet, so register both GitHub r
         { "type": "vcs", "url": "https://github.com/msstc4php/vo-base-yii2" }
     ],
     "require": {
-        "msstc4php/vo-base-yii2": "^0.1"
+        "msstc4php/vo-base-yii2": "^0.2"
     }
 }
 ```
@@ -56,6 +57,81 @@ public function rules(): array
   would choose them. Validate length with Yii's `string` validator, or use `NonEmptyString`.
 - Server-side only: no client-side (JavaScript) validation is generated.
 - Pass `'mapper' => new ValueObjectMapper([new YourCodec()])` to validate your own composite.
+
+## Action parameters
+
+```php
+use MSSTC4PHP\ValueObject\Identity\EmailAddress;
+use MSSTC4PHP\ValueObject\Yii2\Web\ValueObjectActionParams;
+use yii\web\Controller;
+
+final class UserController extends Controller
+{
+    use ValueObjectActionParams;
+
+    public function actionView(EmailAddress $email, ?Priority $priority): array
+    {
+        // $email is an EmailAddress; /user/view?email=nope is a 404, not a TypeError
+    }
+}
+```
+
+The trait overrides `yii\web\Controller::bindActionParams()`. Without it Yii hands the raw string to the typed
+parameter and PHP throws a `TypeError` (500).
+
+- Applies to a parameter with a single named type that is a scalar-backed value object (`EmailAddress`,
+  `PositiveInt`, `Uuid`, ...) or a backed enum. Inline actions and standalone `Action::run()` actions are bound alike;
+  injected services still are.
+- Invalid input, including an array (`?email[]=x`), is a `NotFoundHttpException` (404) whose message names the type as
+  words ("email address"), never a class.
+- `?EmailAddress`: an absent, `null` or `''` parameter is `null`. A non-nullable parameter that is absent is Yii's
+  400 "Missing required parameters", an empty one is a 404; a default value is used when the parameter is absent.
+- An argument that already is an instance (set by your code or a filter) passes through untouched. Union and
+  intersection types are left to Yii.
+- A parameter typed with a class that cannot be bound, `BoundedString` (its payload carries its own bounds) or a
+  composite such as `IntRange` (a URL segment cannot carry one), is a `LogicException` naming the parameter: a
+  programming error found on the first request, never the raw string reaching the typed parameter.
+- The mapper is `Yii::$container->get(ValueObjectMapper::class)`; define it in the container to add codecs.
+
+## Model values
+
+```php
+use MSSTC4PHP\ValueObject\Yii2\Model\ValueObjectModel;
+use MSSTC4PHP\ValueObject\Yii2\Validator\ValueObjectValidator;
+use yii\base\Model;
+
+final class SignupForm extends Model
+{
+    use ValueObjectModel;
+
+    public ?string $email = null;
+    public ?string $range = null;
+
+    public function rules(): array
+    {
+        return [
+            ['email', ValueObjectValidator::class, 'valueObjectClass' => EmailAddress::class],
+            ['range', ValueObjectValidator::class, 'valueObjectClass' => IntRange::class],
+        ];
+    }
+}
+
+// In a REST action: an invalid model is answered with 422 and the field errors by yii\rest\Serializer.
+$form = new SignupForm();
+$form->load(Yii::$app->getRequest()->getBodyParams(), '');
+if (!$form->validate()) {
+    return $form;
+}
+
+$email = $form->valueObject('email');   // EmailAddress|null
+$all = $form->valueObjects();           // ['email' => EmailAddress|null, 'range' => IntRange|null]
+```
+
+- The class (and the `mapper` option, if given) comes from the attribute's `ValueObjectValidator` rule, so the rule and
+  the conversion cannot disagree; a composite may come as its payload array or as JSON text.
+- A `null` or `''` attribute gives `null`; an attribute already holding the value object gives it back.
+- Call it after `validate()`. A model with errors, an attribute without such a rule, or a value that does not convert
+  is a `LogicException`.
 
 ## ActiveRecord behavior
 
