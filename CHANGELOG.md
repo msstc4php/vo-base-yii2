@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 - unreleased
+## 0.3.0 - 2026-11-23
 
 - `Behavior\ValueObjectAttributeBehavior` without a `mapper` option uses `Yii::$container->get(ValueObjectMapper::class)`,
   like the validator, the model trait and the action parameters; before, it used a plain mapper of its own, so a codec
