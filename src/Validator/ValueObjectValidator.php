@@ -9,6 +9,7 @@ use MSSTC4PHP\ValueObject\Contract\ValueObject;
 use MSSTC4PHP\ValueObject\Exception\InvalidValueObjectException;
 use MSSTC4PHP\ValueObject\Payload\ValueObjectMapper;
 use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
+use MSSTC4PHP\ValueObject\Yii2\Internal\DefaultMapper;
 use Override;
 use yii\base\InvalidConfigException;
 use yii\BaseYii;
@@ -58,7 +59,7 @@ final class ValueObjectValidator extends Validator
     {
         parent::init();
 
-        $this->resolvedMapper = $this->mapper ?? BaseYii::$container->get(ValueObjectMapper::class);
+        $this->resolvedMapper = $this->mapper ?? DefaultMapper::get();
         $class = $this->valueObjectClass;
         if ($class === null || !$this->resolvedMapper->supports($class)) {
             throw new InvalidConfigException(\sprintf('%s::$valueObjectClass must name a value object class the payload mapper supports, %s given.', self::class, $class ?? 'null'));

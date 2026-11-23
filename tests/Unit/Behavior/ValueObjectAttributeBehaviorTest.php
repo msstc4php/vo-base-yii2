@@ -24,6 +24,7 @@ use MSSTC4PHP\ValueObject\Temporal\DateRange;
 use MSSTC4PHP\ValueObject\Yii2\Behavior\ValueObjectAttributeBehavior;
 use MSSTC4PHP\ValueObject\Yii2\Behavior\ValueObjectAttributes;
 use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
+use MSSTC4PHP\ValueObject\Yii2\Internal\DefaultMapper;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\PlainProfile;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Profile;
@@ -43,10 +44,12 @@ use yii\base\Behavior;
 use yii\base\Component;
 use yii\base\InvalidConfigException;
 use yii\base\ModelEvent;
+use yii\BaseYii;
 use yii\db\AfterSaveEvent;
 use yii\db\BaseActiveRecord;
 use yii\db\IntegrityException;
 
+#[UsesClass(DefaultMapper::class)]
 #[CoversClass(ValueObjectAttributeBehavior::class)]
 #[CoversTrait(ValueObjectAttributes::class)]
 #[UsesClass(ValueObjectValidator::class)]
@@ -630,6 +633,26 @@ final class ValueObjectAttributeBehaviorTest extends TestCase
         self::assertTrue($profile->save());
         self::assertSame('{"width":2,"height":3}', $this->storedRow()['range']);
         self::assertEquals(new Size(2, 3), $profile->range);
+    }
+
+    public function testWithoutAMapperTheContainersOneMapsACustomComposite(): void
+    {
+        BaseYii::$container->setSingleton(ValueObjectMapper::class, static fn (): ValueObjectMapper => new ValueObjectMapper([new SizeCodec()]));
+
+        try {
+            $profile = new Profile();
+            $profile->detachBehavior('valueObjects');
+            $profile->attachBehavior('size', [
+                'class' => ValueObjectAttributeBehavior::class,
+                'attributes' => ['range' => Size::class],
+            ]);
+            $profile->setAttribute('range', new Size(2, 3));
+
+            self::assertTrue($profile->save());
+            self::assertSame('{"width":2,"height":3}', $this->storedRow()['range']);
+        } finally {
+            BaseYii::$container->clear(ValueObjectMapper::class);
+        }
     }
 
     /**

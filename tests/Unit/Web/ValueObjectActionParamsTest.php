@@ -8,6 +8,7 @@ use LogicException;
 use MSSTC4PHP\ValueObject\Exception\InvalidValueObjectException;
 use MSSTC4PHP\ValueObject\Identity\EmailAddress;
 use MSSTC4PHP\ValueObject\Primitive\IntRange;
+use MSSTC4PHP\ValueObject\Yii2\Internal\DefaultMapper;
 use MSSTC4PHP\ValueObject\Yii2\Internal\TypeLabel;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Level;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
@@ -17,6 +18,7 @@ use MSSTC4PHP\ValueObject\Yii2\Web\ValueObjectActionParams;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use yii\BaseYii;
@@ -24,6 +26,7 @@ use yii\web\BadRequestHttpException;
 use yii\web\NotFoundHttpException;
 
 #[CoversTrait(ValueObjectActionParams::class)]
+#[UsesClass(DefaultMapper::class)]
 #[CoversClass(TypeLabel::class)]
 final class ValueObjectActionParamsTest extends TestCase
 {

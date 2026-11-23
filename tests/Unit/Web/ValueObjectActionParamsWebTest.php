@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MSSTC4PHP\ValueObject\Yii2\Tests\Unit\Web;
 
+use MSSTC4PHP\ValueObject\Yii2\Internal\DefaultMapper;
 use MSSTC4PHP\ValueObject\Yii2\Internal\TypeLabel;
 use MSSTC4PHP\ValueObject\Yii2\Model\ValueObjectModel;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Web\BodyErrorHandler;
@@ -24,6 +25,7 @@ use yii\web\Request;
 use yii\web\Response;
 
 #[CoversTrait(ValueObjectActionParams::class)]
+#[UsesClass(DefaultMapper::class)]
 #[UsesClass(TypeLabel::class)]
 #[UsesTrait(ValueObjectModel::class)]
 #[UsesClass(ValueObjectValidator::class)]

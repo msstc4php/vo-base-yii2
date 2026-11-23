@@ -10,6 +10,7 @@ use MSSTC4PHP\ValueObject\Exception\InvalidPayloadException;
 use MSSTC4PHP\ValueObject\Exception\InvalidValueObjectException;
 use MSSTC4PHP\ValueObject\Payload\ValueObjectMapper;
 use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
+use MSSTC4PHP\ValueObject\Yii2\Internal\DefaultMapper;
 use Override;
 use yii\base\Behavior;
 use yii\base\InvalidConfigException;
@@ -43,11 +44,10 @@ final class ValueObjectAttributeBehavior extends Behavior
     public array $attributes = [];
 
     /**
-     * Pass one built with your own codecs to map a custom composite.
+     * Pass one built with your own codecs to map a custom composite, or define it in the container: without one the
+     * container's ValueObjectMapper definition is used, as by the validator, else a plain mapper shared by all.
      */
     public ?ValueObjectMapper $mapper = null;
-
-    private static ?ValueObjectMapper $defaultMapper = null;
 
     private BaseActiveRecord $record;
 
@@ -94,7 +94,7 @@ final class ValueObjectAttributeBehavior extends Behavior
             throw new InvalidConfigException(\sprintf('%s attaches to a %s, %s given.', self::class, BaseActiveRecord::class, get_debug_type($owner)));
         }
 
-        $mapper = $this->mapper ?? self::$defaultMapper ??= new ValueObjectMapper();
+        $mapper = $this->mapper ?? DefaultMapper::get();
         foreach ($this->attributes as $name => $class) {
             if (!\is_string($name) || !\is_string($class) || !$mapper->supports($class)) {
                 throw new InvalidConfigException(\sprintf('%s::$attributes must map attribute names to value object classes the payload mapper supports; "%s" => %s is not.', self::class, $name, \is_string($class) ? $class : get_debug_type($class)));

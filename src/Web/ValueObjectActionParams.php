@@ -7,6 +7,7 @@ namespace MSSTC4PHP\ValueObject\Yii2\Web;
 use LogicException;
 use MSSTC4PHP\ValueObject\Exception\InvalidValueObjectException;
 use MSSTC4PHP\ValueObject\Payload\ValueObjectMapper;
+use MSSTC4PHP\ValueObject\Yii2\Internal\DefaultMapper;
 use MSSTC4PHP\ValueObject\Yii2\Internal\TypeLabel;
 use Override;
 use ReflectionMethod;
@@ -55,7 +56,7 @@ trait ValueObjectActionParams
      */
     private static function withValueObjects(ReflectionMethod $method, array $params): array
     {
-        $mapper = BaseYii::$container->get(ValueObjectMapper::class);
+        $mapper = DefaultMapper::get();
         $missing = [];
         foreach ($method->getParameters() as $parameter) {
             $name = $parameter->getName();

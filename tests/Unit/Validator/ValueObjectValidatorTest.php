@@ -15,6 +15,7 @@ use MSSTC4PHP\ValueObject\Primitive\IntRange;
 use MSSTC4PHP\ValueObject\Primitive\Percentage;
 use MSSTC4PHP\ValueObject\Primitive\PositiveInt;
 use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
+use MSSTC4PHP\ValueObject\Yii2\Internal\DefaultMapper;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Size;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\SizeCodec;
@@ -22,12 +23,14 @@ use MSSTC4PHP\ValueObject\Yii2\Tests\Support\YiiApplication;
 use MSSTC4PHP\ValueObject\Yii2\Validator\ValueObjectValidator;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use yii\base\DynamicModel;
 use yii\base\InvalidConfigException;
 use yii\web\View;
 
+#[UsesClass(DefaultMapper::class)]
 #[CoversClass(ValueObjectValidator::class)]
 #[CoversClass(CompositeJson::class)]
 final class ValueObjectValidatorTest extends TestCase

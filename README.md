@@ -146,11 +146,14 @@ $all = $form->valueObjects();           // ['email' => EmailAddress|null, 'range
 
 ## Custom codecs
 
-The validator, the model trait and the action parameters all use the mapper from the container unless a rule gives
-its own `mapper`. Define it once, with your codecs, as a singleton:
+The validator, the model trait, the action parameters and the ActiveRecord behavior all use the mapper from the
+container unless a rule or the behavior gives its own `mapper`. Define it once, with your codecs (or a package's whole
+set through its `ProvidesCodecs` class), as a singleton. Without a definition they share one plain mapper; a
+definition that builds anything else than a `ValueObjectMapper` throws `LogicException`:
 
 ```php
 Yii::$container->setSingleton(ValueObjectMapper::class, static fn (): ValueObjectMapper => new ValueObjectMapper([new SizeCodec()]));
+// vo-documents' composite names: new ValueObjectMapper(\MSSTC4PHP\ValueObject\Documents\Codecs::all())
 ```
 
 ## ActiveRecord behavior
@@ -208,7 +211,8 @@ $customer->email;                       // EmailAddress again
   one at the first find or save (attach stays schema-free, so a model can be built before its table exists).
 - Any `BaseActiveRecord` works. Only a `yii\db\ActiveRecord` is asked whether a column is a JSON column; other
   ActiveRecords (MongoDB, Redis, Elasticsearch) get composites as JSON strings.
-- Pass `'mapper' => new ValueObjectMapper([new YourCodec()])` to map your own composite.
+- Without a `mapper` option the container's mapper is used (see "Custom codecs"); pass
+  `'mapper' => new ValueObjectMapper([new YourCodec()])` to give one behavior a mapper of its own.
 
 ### Failed and vetoed saves
 

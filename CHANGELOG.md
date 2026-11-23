@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 - unreleased
+
+- `Behavior\ValueObjectAttributeBehavior` without a `mapper` option uses `Yii::$container->get(ValueObjectMapper::class)`,
+  like the validator, the model trait and the action parameters; before, it used a plain mapper of its own, so a codec
+  defined in the container (vo-documents' composite names, an application's own composites) needed a `mapper` option
+  on every behavior. Without a container definition every component shares one plain mapper (the validator and the
+  action parameters used to build a new one per use); a definition that builds anything else than a
+  `ValueObjectMapper` throws `LogicException`.
+
 ## 0.2.0 - 2026-11-12
 
 - `Web\ValueObjectActionParams`: controller trait that binds action parameters typed with a scalar-backed value
