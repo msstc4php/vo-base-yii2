@@ -137,3 +137,6 @@ overrides the codecs for all three entry points.
   relative path" outside a git checkout; pass `--logger-project-root-directory=$PWD` or run after `git init`.
 - Sibling packages built in parallel share PHPStan's default tmp dir (`sys_get_temp_dir()/phpstan`) and corrupted
   each other's result cache; run with `TMPDIR=$PWD/var/tmp` when that happens.
+- Since 0.3.0 the default mapper is `Yii::$container->get(ValueObjectMapper::class)` when `has()` is true
+  (`Internal\DefaultMapper`); a non-mapper definition is a `LogicException`, no definition falls back to one shared
+  `new ValueObjectMapper()`.
