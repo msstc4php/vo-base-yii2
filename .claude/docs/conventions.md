@@ -11,6 +11,9 @@ mapper's `LogicException`: support is checked before the mapper is ever called w
 
 A trait holds only public or overriding methods; their bodies live in `Internal\` static classes with a private
 constructor. A private trait method would be replaced, silently, by a user method of the same name.
+The README promises that no 1.x release adds a method, property or constant to a trait; Roave does not report
+additions to a trait, so `testTheTraitHolds*` (one per trait) freezes each trait's method list and asserts it has no
+properties or constants.
 
 ## `BaseYii`, not `Yii`
 

@@ -21,13 +21,18 @@ covered: message wording otherwise and anything `@internal`.
   `@internal` classes (`Internal\ActionParamBinder`, `Internal\ModelValues`, `Internal\RecordBehaviors`): a method of
   the same name in your controller or model (`bindValueObject()`, `convertAttribute()`, `restoreValueObjects()`, ...)
   replaced the trait's helper silently. The traits now hold only their public methods.
+- `ValueObjectModel::valueObject()` / `valueObjects()` read the attribute as Yii's validators do, through
+  `$model->attribute` from outside the class: a getter now wins over a non-public property of the same name. Before,
+  the trait read that property directly, so it could convert a value the rule never checked (the rule validated the
+  getter's value).
 - README: the validator's `{value}` placeholder is no longer advertised; Yii fills it with the submitted input, so a
   custom message using it repeats the input to the client.
 
 ### Upgrading from 0.x
 
-- No change to the rule, the options, the behavior's storage, the traits' public methods, the action parameter
-  binding or the messages.
+- No change to the rule, the options, the behavior's storage, the action parameter binding or the messages.
+- A model that declares a non-public property and a getter of the same name for a validated attribute now gets the
+  getter's value (the one the rule validated) from `valueObject()` / `valueObjects()`, not the property's.
 - Update `msstc4php/vo-base` to ^1.4 if it is pinned lower.
 - A custom validator message that uses `{value}` still works, but repeats the client's input; drop the placeholder.
 - Code that called `ValueObjectValidator::resolvedMapper()` should read the rule's `mapper` option or the container's

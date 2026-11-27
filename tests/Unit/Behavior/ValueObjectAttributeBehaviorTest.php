@@ -43,6 +43,8 @@ use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+use ReflectionMethod;
 use stdClass;
 use Throwable;
 use yii\base\Behavior;
@@ -443,10 +445,23 @@ final class ValueObjectAttributeBehaviorTest extends TestCase
     {
         $this->insertRow(['range' => '5']);
 
-        $this->expectException(InvalidPayloadException::class);
-        $this->expectExceptionMessage('payload must be a JSON object, int given.');
+        try {
+            $this->findProfile();
+            self::fail('Expected InvalidPayloadException.');
+        } catch (Throwable $notAnObject) {
+            self::assertInstanceOf(InvalidPayloadException::class, $notAnObject);
+            self::assertStringEndsWith('payload must be a JSON object, int given.', $notAnObject->getMessage());
+            self::assertNull($notAnObject->getPrevious());
+        }
+    }
 
-        $this->findProfile();
+    public function testTheTraitHoldsOnlyItsOverrides(): void
+    {
+        $trait = new ReflectionClass(ValueObjectAttributes::class);
+
+        self::assertSame(['insert', 'update', 'updateAttributes'], array_map(static fn (ReflectionMethod $method): string => $method->getName(), $trait->getMethods()));
+        self::assertSame([], $trait->getProperties());
+        self::assertSame([], $trait->getReflectionConstants());
     }
 
     public function testATypoInTheMapFailsAtFirstUseNotAtAttach(): void

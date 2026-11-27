@@ -25,6 +25,8 @@ use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+use ReflectionMethod;
 use stdClass;
 use yii\BaseYii;
 use yii\web\BadRequestHttpException;
@@ -160,6 +162,15 @@ final class ValueObjectActionParamsTest extends TestCase
         } finally {
             BaseYii::$container->clear(ValueObjectMapper::class);
         }
+    }
+
+    public function testTheTraitHoldsOnlyItsOverride(): void
+    {
+        $trait = new ReflectionClass(ValueObjectActionParams::class);
+
+        self::assertSame(['bindActionParams'], array_map(static fn (ReflectionMethod $method): string => $method->getName(), $trait->getMethods()));
+        self::assertSame([], $trait->getProperties());
+        self::assertSame([], $trait->getReflectionConstants());
     }
 
     public function testBackedEnumIsConverted(): void

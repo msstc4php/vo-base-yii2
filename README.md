@@ -266,13 +266,16 @@ The same formats as every other `vo-base` bridge, so a row written by one reads 
   - `Behavior\ValueObjectAttributeBehavior`, with the options `attributes` (attribute name => class) and `mapper`, and
     the public pair `dehydrate()` and `hydrate()`; `events()` and `attach()` are Yii's to call;
   - `Behavior\ValueObjectAttributes`, the ActiveRecord trait, overriding `insert()`, `update()` and
-    `updateAttributes()` with Yii's signatures;
+    `updateAttributes()` with Yii's parameter lists, returning `bool`, `false|int` and `int` (an override in your
+    model must declare a compatible return type);
   - `Model\ValueObjectModel`, the model trait, with `valueObject(string $attribute, ?string $class = null)` and
-    `valueObjects()`;
+    `valueObjects()`, which read the attribute as Yii's validators do (`$model->attribute`, so a getter wins over a
+    non-public property of the same name);
   - `Web\ValueObjectActionParams`, the controller trait, overriding `bindActionParams($action, $params)`.
 
-  The traits hold only these methods, and a minor adds none: a trait method would silently replace, or be replaced
-  by, a method of the same name in your class.
+  The traits hold only these methods. No 1.x release adds a method, property or constant to them: a method your
+  class declares would silently replace the trait's (or fail to compile if the signatures differ), a trait method
+  would silently replace one your class inherits, and a property or constant of the same name is a conflict.
 - **Names users write:** the option names above; the container id `ValueObjectMapper::class` in `Yii::$container`,
   which the validator, the behavior, the model trait and the action parameters use when no `mapper` option is given
   (one shared plain mapper without a definition); the action parameter binding: a parameter with a single named type
@@ -301,8 +304,9 @@ The same formats as every other `vo-base` bridge, so a row written by one reads 
     `yii\web\BadRequestHttpException` (400) for missing required parameters, with no previous;
   - `LogicException` from the action parameters for a parameter typed with a composite or a trusted-source-only
     class; from the model trait for a model with errors, an attribute without the rule, a class other than the
-    rule's, or a rule without `valueObjectClass` (no previous), and for a value that does not convert (vo-base's
-    exception as previous);
+    rule's, or a rule without `valueObjectClass` (no previous), and for a value that does not convert (an
+    `InvalidValueObjectException` as previous: vo-base's own, or for composite JSON text the bridge's
+    `InvalidPayloadException`);
   - `LogicException` from any component without a `mapper` option when the container's `ValueObjectMapper`
     definition builds something else.
 - **Enums:** the validator, the behavior, the model trait and the action parameters handle backed enums; an unknown
@@ -315,8 +319,8 @@ A minor never refuses a value an earlier 1.x accepted: the validator, the behavi
 parameters add no validation of their own, the value objects (vo-base and the domain packages) decide, and they follow
 the same rule.
 
-Not covered: exception message wording (the package's messages name a type label, an attribute or a parameter,
-never the value), except the translation keys above; anything marked `@internal` (`Internal\`,
+Not covered: exception message wording (the package's messages name classes, attributes, parameters or type
+labels, never the value), except the translation keys above; anything marked `@internal` (`Internal\`,
 `ValueObjectValidator::resolvedMapper()` and `ValueObjectAttributeBehavior::hydrateFromStorage()`).
 
 ## Development

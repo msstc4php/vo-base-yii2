@@ -37,8 +37,8 @@
 
 ## Yii 2 model — `Model\ValueObjectModel`
 
-- The trait delegates to `Internal\ModelValues::one()` / `all()`, which read the model through its public API only.
-
+- The trait delegates to `Internal\ModelValues::one()` / `all()`, which read the model through its public API only
+  (so a getter wins over a non-public property of the same name, as for validators).
 - `valueObject($attribute)`: `hasErrors()` -> `LogicException`; the attribute's first active `ValueObjectValidator`
   (`getActiveValidators($attribute)`, so scenario-aware) gives `valueObjectClass` and `mapper`, else the container's
   mapper. `valueObjects()` walks every active `ValueObjectValidator` and its `getAttributeNames()`.

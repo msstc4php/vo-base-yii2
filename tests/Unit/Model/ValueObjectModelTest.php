@@ -18,6 +18,7 @@ use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Code;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\CodeForm;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\ConditionalForm;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\ContactForm;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\GetterForm;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\LongCode;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\ShortCode;
@@ -30,6 +31,8 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+use ReflectionMethod;
 use yii\BaseYii;
 
 #[CoversTrait(ValueObjectModel::class)]
@@ -136,9 +139,23 @@ final class ValueObjectModelTest extends TestCase
     {
         $form = $this->validForm(['name' => 'Ann']);
 
-        $this->expectException(LogicException::class);
-        $this->expectExceptionMessage('name');
-        $form->valueObject('name');
+        try {
+            $form->valueObject('name');
+            self::fail('Expected LogicException.');
+        } catch (LogicException $error) {
+            self::assertStringContainsString('"name" has no', $error->getMessage());
+            self::assertNull($error->getPrevious());
+        }
+    }
+
+    public function testAGetterWinsOverANonPublicPropertyOfTheSameName(): void
+    {
+        $form = new GetterForm();
+        self::assertTrue($form->validate());
+        self::assertSame('raw@example.com', $form->rawEmail());
+
+        self::assertEquals(EmailAddress::from('getter@example.com'), $form->valueObject('email'));
+        self::assertEquals(['email' => EmailAddress::from('getter@example.com')], $form->valueObjects());
     }
 
     public function testUnvalidatedInputIsALogicException(): void
@@ -285,9 +302,13 @@ final class ValueObjectModelTest extends TestCase
     {
         $form = $this->validForm(['email' => 'user@example.com']);
 
-        $this->expectException(LogicException::class);
-        $this->expectExceptionMessage('is validated as ' . EmailAddress::class . ', not ' . IntRange::class . '.');
-        $form->valueObject('email', IntRange::class);
+        try {
+            $form->valueObject('email', IntRange::class);
+            self::fail('Expected LogicException.');
+        } catch (LogicException $error) {
+            self::assertStringEndsWith('is validated as ' . EmailAddress::class . ', not ' . IntRange::class . '.', $error->getMessage());
+            self::assertNull($error->getPrevious());
+        }
     }
 
     public function testRuleWithoutAClassIsALogicException(): void
@@ -299,9 +320,22 @@ final class ValueObjectModelTest extends TestCase
             }
         }
 
-        $this->expectException(LogicException::class);
-        $this->expectExceptionMessage('no valueObjectClass');
-        $form->valueObject('email');
+        try {
+            $form->valueObject('email');
+            self::fail('Expected LogicException.');
+        } catch (LogicException $error) {
+            self::assertStringContainsString('no valueObjectClass', $error->getMessage());
+            self::assertNull($error->getPrevious());
+        }
+    }
+
+    public function testTheTraitHoldsOnlyItsPublicMethods(): void
+    {
+        $trait = new ReflectionClass(ValueObjectModel::class);
+
+        self::assertSame(['valueObject', 'valueObjects'], array_map(static fn (ReflectionMethod $method): string => $method->getName(), $trait->getMethods()));
+        self::assertSame([], $trait->getProperties());
+        self::assertSame([], $trait->getReflectionConstants());
     }
 
     /**

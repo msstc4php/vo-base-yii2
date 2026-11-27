@@ -1,6 +1,9 @@
 # Architecture
 
-Five public layers in `deptrac.yaml` plus `Internal` and the two trait-body layers; `Validator` and `Behavior` never see each other, `Web` and `Behavior` neither; `Internal` is usable by all, `Model` also reads `Validator`:
+Seven layers in `deptrac.yaml`: four public ones (`Validator`, `Behavior`, `Web`, `Model`), `Internal`, and the two
+trait-body layers `ModelInternal` (uses Internal, Validator) and `BehaviorInternal` (uses Behavior only; the
+Behavior <-> BehaviorInternal cycle is intended). `Validator` and `Behavior` never see each other, `Web` and
+`Behavior` neither; `Internal` is usable by every public layer, `Model` also reads `Validator`:
 
 - **`Validator/`** — `ValueObjectValidator`, the request-input path.
 - **`Behavior/`** — `ValueObjectAttributeBehavior` (the storage path) and the `ValueObjectAttributes` trait for the

@@ -74,7 +74,8 @@ old **payloads** (old attributes are dehydrated too, so the dirty comparison is 
 Roave installs the base version via `Composer\Factory::createComposer(..., null, ..., $path)`, and a null config
 means `Factory::getComposerFile()`, i.e. `$COMPOSER` relative to the checkout. With `COMPOSER=composer-ci.json`
 (workflow env, repeated on the step to make the dependency visible) the tag's `composer-ci.json`, which has the
-bower-asset stand-ins, is used. Unexercised until the first tag: the job exits early without one.
+bower-asset stand-ins, is used. Exercised since v0.1.0; last green on 655b5d4
+(2026-11-27 UTC, against v0.3.0). The first 1.0.0 run is red by design, see "Roave BC check against v0.3.0".
 
 ## The attribute-name check runs at first use, not at attach
 
@@ -128,8 +129,16 @@ as does one whose `when` is false. `ValueObjectModel` therefore returns `null` f
 ## One mapper source
 
 The validator falls back to `Yii::$container->get(ValueObjectMapper::class)` (0.1.0 used a private static default) and
-exposes `resolvedMapper()` (`@internal` since 1.0); the model trait (through `Internal\ModelValues`) uses it, so rule and conversion share one mapper. A container singleton
-overrides the codecs for all three entry points.
+exposes `resolvedMapper()` (`@internal` since 1.0); the model trait (through `Internal\ModelValues`) uses it, so
+rule and conversion share one mapper. A container singleton overrides the codecs for every entry point. Since 0.3.0
+the default mapper is `Yii::$container->get(ValueObjectMapper::class)` when `has()` is true (`Internal\DefaultMapper`);
+a non-mapper definition is a `LogicException`, no definition falls back to one shared `new ValueObjectMapper()`.
+
+## The model trait reads attributes from outside (1.0)
+
+`Internal\ModelValues` reads `$model->{$attribute}` from outside the class, as validators do, so `__get` (a getter)
+wins over a non-public property of the same name. The 0.x trait read `$this->{$attribute}` and so took the property,
+which the rule never validated. Pinned by `GetterForm` / `testAGetterWinsOverANonPublicPropertyOfTheSameName`.
 
 ## Local quirks
 
@@ -137,9 +146,6 @@ overrides the codecs for all three entry points.
   relative path" outside a git checkout; pass `--logger-project-root-directory=$PWD` or run after `git init`.
 - Sibling packages built in parallel share PHPStan's default tmp dir (`sys_get_temp_dir()/phpstan`) and corrupted
   each other's result cache; run with `TMPDIR=$PWD/var/tmp` when that happens.
-- Since 0.3.0 the default mapper is `Yii::$container->get(ValueObjectMapper::class)` when `has()` is true
-  (`Internal\DefaultMapper`); a non-mapper definition is a `LogicException`, no definition falls back to one shared
-  `new ValueObjectMapper()`.
 
 ## Roave BC check against v0.3.0
 

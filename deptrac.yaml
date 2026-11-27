@@ -37,11 +37,13 @@ deptrac:
           value: src/Model/.*
   ruleset:
     # The core and Yii are not declared as layers. The validator (request input)
-    # and the behavior (storage) never see each other; Internal holds what they
-    # must agree on (the JSON form of a composite, the client-facing type label).
-    # Model reads what the validator rule declares. ModelInternal and
-    # BehaviorInternal hold the bodies of the Model and Behavior traits, so they
-    # see only their own area.
+    # and the behavior (storage) never see each other; Internal holds what the
+    # areas share (the JSON form of a composite, the client-facing type label,
+    # the default mapper) and the controller trait's body. Model reads what the
+    # validator rule declares. ModelInternal and BehaviorInternal hold the bodies
+    # of the Model and Behavior traits and see only their own area. The cycle
+    # Behavior -> BehaviorInternal -> Behavior is intended: the trait calls
+    # RecordBehaviors, which needs ValueObjectAttributeBehavior; do not widen it.
     Internal: ~
     ModelInternal:
       - Internal
