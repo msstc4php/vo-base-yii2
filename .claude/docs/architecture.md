@@ -1,6 +1,6 @@
 # Architecture
 
-Five layers in `deptrac.yaml`; `Validator` and `Behavior` never see each other, `Web` and `Behavior` neither; `Internal` is usable by all, `Model` also reads `Validator`:
+Five public layers in `deptrac.yaml` plus `Internal` and the two trait-body layers; `Validator` and `Behavior` never see each other, `Web` and `Behavior` neither; `Internal` is usable by all, `Model` also reads `Validator`:
 
 - **`Validator/`** — `ValueObjectValidator`, the request-input path.
 - **`Behavior/`** — `ValueObjectAttributeBehavior` (the storage path) and the `ValueObjectAttributes` trait for the
@@ -8,7 +8,12 @@ Five layers in `deptrac.yaml`; `Validator` and `Behavior` never see each other, 
 - **`Web/`** — `ValueObjectActionParams`, controller trait (route/query parameter -> typed action argument).
 - **`Model/`** — `ValueObjectModel`, model trait reading validated attributes as value objects; the only consumer of
   `Validator` (it takes the class and mapper from the rule).
-- **`Internal/`** — `TypeLabel` (`@internal`, "email address" from `EmailAddress`; same algorithm as the Laravel
+- **`Internal/`** (all `@internal`) — `ActionParamBinder`, `ModelValues` and `RecordBehaviors` hold the bodies of the
+  three traits (a private trait helper is silently replaced by a user method of the same name, so the traits keep only
+  their public/overriding methods; adding a method to a trait in a minor is excluded by the README BC section).
+  `ModelValues` (deptrac layer `ModelInternal`: Internal + Validator) and `RecordBehaviors` (`BehaviorInternal`:
+  Behavior) are separate deptrac layers, collected by class name, so the plain `Internal` layer still sees no public
+  area. `DefaultMapper` (container mapper or a shared fallback), `TypeLabel` (`@internal`, "email address" from `EmailAddress`; same algorithm as the Laravel
   rule's `typeLabel()`, one copy per package) and `CompositeJson` (`@internal`): decode/encode of a composite's JSON text, so the validator accepts
   exactly what the behavior accepts on save, and both report JSON errors as `InvalidPayloadException`.
 
@@ -35,7 +40,8 @@ payload carries its own `minLength`/`maxLength`, so:
 | `beforeInsert`, `beforeUpdate` | `dehydrate()` | value object (or raw, untrusted) -> payload, recorded in `$written` | value object -> payload, recorded in `$writtenOld` |
 | `afterInsert`, `afterUpdate`, trait `finally` | `hydrate()` | the recorded instance back where the payload is still in place | the current attribute's instance when its payload matches, else the recorded old instance |
 
-`hydrate()` never calls the mapper: it puts back the exact instances `dehydrate()` replaced, so it cannot fail, is
+`dehydrate()` and `hydrate()` are the documented public pair (1.0, O5): users call them around writes that skip the
+save events; `hydrateFromStorage()` is `@internal`. `hydrate()` never calls the mapper: it puts back the exact instances `dehydrate()` replaced, so it cannot fail, is
 idempotent (the records are cleared), and never turns rejected raw input into a value object (an attribute whose
 raw value was refused was never recorded). `dehydrate()` starts with `hydrate()`, so a second save after a vetoed
 one without the trait still works.

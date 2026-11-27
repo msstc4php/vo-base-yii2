@@ -25,9 +25,14 @@ use MSSTC4PHP\ValueObject\Yii2\Behavior\ValueObjectAttributeBehavior;
 use MSSTC4PHP\ValueObject\Yii2\Behavior\ValueObjectAttributes;
 use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
 use MSSTC4PHP\ValueObject\Yii2\Internal\DefaultMapper;
+use MSSTC4PHP\ValueObject\Yii2\Internal\RecordBehaviors;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\AppCodecs;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\CodeProfile;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\LongCode;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\PlainProfile;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Profile;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\ShortCode;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Size;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\SizeCodec;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Support\YiiApplication;
@@ -52,6 +57,7 @@ use yii\db\IntegrityException;
 #[UsesClass(DefaultMapper::class)]
 #[CoversClass(ValueObjectAttributeBehavior::class)]
 #[CoversTrait(ValueObjectAttributes::class)]
+#[CoversClass(RecordBehaviors::class)]
 #[UsesClass(ValueObjectValidator::class)]
 #[CoversClass(CompositeJson::class)]
 final class ValueObjectAttributeBehaviorTest extends TestCase
@@ -265,10 +271,15 @@ final class ValueObjectAttributeBehaviorTest extends TestCase
         $profile = new Profile();
         $profile->setAttributes(['label' => $raw], false);
 
-        $this->expectException(InvalidPayloadException::class);
-        $this->expectExceptionMessage('The "label" attribute takes a ' . BoundedString::class . ' instance, ');
-
-        $profile->save(false);
+        try {
+            $profile->save(false);
+            self::fail('Expected InvalidPayloadException.');
+        } catch (Throwable $refused) {
+            self::assertInstanceOf(InvalidPayloadException::class, $refused);
+            self::assertStringStartsWith('The "label" attribute takes a ' . BoundedString::class . ' instance, ', $refused->getMessage());
+            self::assertStringNotContainsString('hi', $refused->getMessage());
+            self::assertNull($refused->getPrevious());
+        }
     }
 
     public function testANullBoundedStringIsStored(): void
@@ -635,9 +646,38 @@ final class ValueObjectAttributeBehaviorTest extends TestCase
         self::assertEquals(new Size(2, 3), $profile->range);
     }
 
+    public function testAnAbstractClassResolvingItsConcreteClassIsStoredAndRead(): void
+    {
+        $short = new CodeProfile(['name' => 'abc']);
+        $long = new CodeProfile(['name' => new LongCode('abcdef')]);
+        self::assertTrue($short->save(false));
+        self::assertTrue($long->save(false));
+        self::assertInstanceOf(ShortCode::class, $short->name);
+
+        $found = CodeProfile::find()->orderBy('id')->all();
+        self::assertCount(2, $found);
+        self::assertInstanceOf(ShortCode::class, $found[0]->name);
+        self::assertInstanceOf(LongCode::class, $found[1]->name);
+        self::assertSame('abcdef', (string) $found[1]->name);
+        self::assertSame(0, $found[1]->update(false));
+    }
+
+    public function testAValueNoConcreteClassFitsIsRefusedOnSaveAndOnFind(): void
+    {
+        try {
+            new CodeProfile(['name' => 'abcdefgh'])->save(false);
+            self::fail('Expected InvalidValueObjectException.');
+        } catch (InvalidValueObjectException) {
+        }
+
+        $this->db()->createCommand()->insert('profile', ['name' => 'abcdefgh'])->execute();
+        $this->expectException(InvalidValueObjectException::class);
+        CodeProfile::find()->one();
+    }
+
     public function testWithoutAMapperTheContainersOneMapsACustomComposite(): void
     {
-        BaseYii::$container->setSingleton(ValueObjectMapper::class, static fn (): ValueObjectMapper => new ValueObjectMapper([new SizeCodec()]));
+        BaseYii::$container->setSingleton(ValueObjectMapper::class, static fn (): ValueObjectMapper => new ValueObjectMapper(AppCodecs::all()));
 
         try {
             $profile = new Profile();

@@ -4,7 +4,8 @@ Yii 2 glue for [`msstc4php/vo-base`][core]: a validator that asks the value obje
 parameters and model attributes that arrive as value objects, and an ActiveRecord behavior that keeps value objects in
 your model and scalars in your database.
 
-Requires PHP >= 8.4 and `yiisoft/yii2` `^2.0.55` (Composer blocks earlier 2.0.x releases on security advisories).
+Requires PHP >= 8.4, `msstc4php/vo-base` `^1.4` and `yiisoft/yii2` `^2.0.55` (Composer blocks earlier 2.0.x releases
+on security advisories).
 
 ## Install
 
@@ -17,7 +18,7 @@ Neither this package nor the core is on Packagist yet, so register both GitHub r
         { "type": "vcs", "url": "https://github.com/msstc4php/vo-base-yii2" }
     ],
     "require": {
-        "msstc4php/vo-base-yii2": "^0.3"
+        "msstc4php/vo-base-yii2": "^1.0"
     }
 }
 ```
@@ -52,7 +53,9 @@ public function rules(): array
 - An instance of the value object itself is valid, so rules keep working on a model whose attribute already holds
   one (see the behavior below).
 - Wrong types (an array for a string, an object, a bool) are a validation error, not an exception.
-- The default message is Yii's own translated `{attribute} is invalid.`; `{attribute}` and `{value}` are available.
+- The default message is Yii's own translated `{attribute} is invalid.`; a custom message gets `{attribute}`, the
+  attribute's label. Do not use `{value}` in it: Yii fills that placeholder with the submitted input, so the message
+  would repeat the client's input back (to a log, an API response, another user's screen).
 - `BoundedString` is refused with `InvalidConfigException`: its payload carries its own length limits, so a client
   would choose them. Validate length with Yii's `string` validator, or use `NonEmptyString`.
 - Server-side only: no client-side (JavaScript) validation is generated.
@@ -85,7 +88,8 @@ parameter and PHP throws a `TypeError` (500).
   `PositiveInt`, `Uuid`, ...) or a backed enum. Inline actions and standalone `Action::run()` actions are bound alike;
   injected services still are.
 - Invalid input, including an array (`?email[]=x`), is a `NotFoundHttpException` (404) whose message names the type as
-  words ("email address"), never a class.
+  words ("email address"), never a class or the value. Its previous exception is vo-base's own, whose message may quote an excerpt
+  of the input: log it, do not show it to the client.
 - `?EmailAddress`: an absent, `null` or `''` parameter is `null`. A non-nullable parameter that is absent is Yii's
   400 "Missing required parameters" (listing every missing parameter), an empty one is a 404; a default value is used
   when the parameter is absent.
@@ -211,6 +215,9 @@ $customer->email;                       // EmailAddress again
   one at the first find or save (attach stays schema-free, so a model can be built before its table exists).
 - Any `BaseActiveRecord` works. Only a `yii\db\ActiveRecord` is asked whether a column is a JSON column; other
   ActiveRecords (MongoDB, Redis, Elasticsearch) get composites as JSON strings.
+- `dehydrate()` (value objects to payloads) and `hydrate()` (the value objects back) are public: the behavior calls
+  them around every save, and you call them around a write that skips the save events (see below). The find handler,
+  `hydrateFromStorage()`, is internal.
 - Without a `mapper` option the container's mapper is used (see "Custom codecs"); pass
   `'mapper' => new ValueObjectMapper([new YourCodec()])` to give one behavior a mapper of its own.
 
@@ -223,7 +230,8 @@ the trait, call `$model->getBehavior('valueObjects')->hydrate()` after a failed 
 only restores the instances the behavior itself replaced, so rejected raw input is never turned into a value object.
 
 `updateAttributes()` skips the save events entirely; the trait overrides it to write payloads and restore the value
-objects. Without the trait, use `update(false, ['email'])` instead.
+objects. Without the trait, use `update(false, ['email'])` instead, or call the behavior's `dehydrate()` before the
+write and `hydrate()` after it, in a `finally`.
 
 ### Event order
 
@@ -245,6 +253,71 @@ The same formats as every other `vo-base` bridge, so a row written by one reads 
 | float-backed (`Percentage`, ...) | float | `12.5` |
 | backed enum (`CountryCode`, `CurrencyCode`, your own) | the enum value | `DE` |
 | composite (`IntRange`, `GeoCoordinates`, `DateRange`, `BoundedString`) | JSON text, or an array for a column Yii maps to an array (JSON on MySQL/PostgreSQL) | `{"min":1,"max":5}` |
+
+## Backward compatibility
+
+1.x follows semantic versioning; a breaking change needs 2.0. Covered by 1.x:
+
+- **Code API:** these classes and traits, with the public properties and methods below. None declares a constructor
+  of its own: the validator and the behavior are Yii objects, configured through Yii's config arrays.
+  - `Validator\ValueObjectValidator`, used as `['attr', ValueObjectValidator::class, 'valueObjectClass' => X::class]`,
+    with the options `valueObjectClass` and `mapper` next to Yii's own (`message`, `skipOnEmpty`, `when`, ...);
+    `init()` and `validateValue()` are Yii's to call;
+  - `Behavior\ValueObjectAttributeBehavior`, with the options `attributes` (attribute name => class) and `mapper`, and
+    the public pair `dehydrate()` and `hydrate()`; `events()` and `attach()` are Yii's to call;
+  - `Behavior\ValueObjectAttributes`, the ActiveRecord trait, overriding `insert()`, `update()` and
+    `updateAttributes()` with Yii's signatures;
+  - `Model\ValueObjectModel`, the model trait, with `valueObject(string $attribute, ?string $class = null)` and
+    `valueObjects()`;
+  - `Web\ValueObjectActionParams`, the controller trait, overriding `bindActionParams($action, $params)`.
+
+  The traits hold only these methods, and a minor adds none: a trait method would silently replace, or be replaced
+  by, a method of the same name in your class.
+- **Names users write:** the option names above; the container id `ValueObjectMapper::class` in `Yii::$container`,
+  which the validator, the behavior, the model trait and the action parameters use when no `mapper` option is given
+  (one shared plain mapper without a definition); the action parameter binding: a parameter with a single named type
+  that is a scalar-backed value object or a backed enum, by parameter name, in inline and standalone actions, leaving
+  instances, union and intersection types and unsupported classes alone.
+- **Messages:** the validator's default, Yii's own translation key `{attribute} is invalid.` (category `yii`) with its
+  `{attribute}` placeholder, and Yii's `Missing required parameters: {params}` for the 400. Changing either default
+  needs 2.0.
+- **Data:** the stored formats above. They are vo-base's payload layer, the same as the Doctrine types and the other
+  bridges write, so a row written through one reads through another. Request input and action parameters are read in
+  the same forms.
+- **Exceptions:** configuration errors of the validator and the behavior are Yii's `InvalidConfigException`, those of
+  the traits `LogicException`; that split is kept.
+  - `yii\base\InvalidConfigException`: from the validator's `init()` for a missing `valueObjectClass`, a class the
+    mapper does not support or a trusted-source-only class (`BoundedString`); from the behavior's `attach()` for an
+    owner that is not a `BaseActiveRecord` or a mapped class the mapper does not support, and at the first find or
+    save for a mapped name that is not an attribute of the model;
+  - the behavior: vo-base's `InvalidValueObjectException` or a subclass, unchanged, for an invalid stored or raw value;
+    `InvalidPayloadException` with no previous exception for a raw value of a trusted-source-only class and for
+    composite JSON text that is not an object; `InvalidPayloadException` with the `JsonException` as previous for
+    composite JSON text that does not parse or a composite that cannot be encoded. The `ValueObjectAttributes` trait
+    rethrows whatever the save throws, after the value objects are back;
+  - the validator throws nothing for invalid input: that is a validation error;
+  - `yii\web\NotFoundHttpException` (404) for an invalid action parameter, with vo-base's own exception as previous,
+    passed through unchanged, and with no previous for `''` or `null` on a non-nullable parameter;
+    `yii\web\BadRequestHttpException` (400) for missing required parameters, with no previous;
+  - `LogicException` from the action parameters for a parameter typed with a composite or a trusted-source-only
+    class; from the model trait for a model with errors, an attribute without the rule, a class other than the
+    rule's, or a rule without `valueObjectClass` (no previous), and for a value that does not convert (vo-base's
+    exception as previous);
+  - `LogicException` from any component without a `mapper` option when the container's `ValueObjectMapper`
+    definition builds something else.
+- **Enums:** the validator, the behavior, the model trait and the action parameters handle backed enums; an unknown
+  case in an action parameter is a 404, like any invalid value.
+- **Versions:** a minor may add support for a new Yii or PHP major; dropping a supported Yii or PHP version needs a
+  major, and so does raising the floor of any third-party dependency (Yii, PHP). A minor may raise the floor of a
+  `msstc4php/*` package within its major (those follow the same promise).
+
+A minor never refuses a value an earlier 1.x accepted: the validator, the behavior, the model trait and the action
+parameters add no validation of their own, the value objects (vo-base and the domain packages) decide, and they follow
+the same rule.
+
+Not covered: exception message wording (the package's messages name a type label, an attribute or a parameter,
+never the value), except the translation keys above; anything marked `@internal` (`Internal\`,
+`ValueObjectValidator::resolvedMapper()` and `ValueObjectAttributeBehavior::hydrateFromStorage()`).
 
 ## Development
 

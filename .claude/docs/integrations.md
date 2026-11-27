@@ -11,7 +11,9 @@
 - Every `InvalidValueObjectException` (including `InvalidPayloadException` for wrong type/shape) becomes the
   validation error. A composite also comes as JSON text (what the behavior accepts on save). Unlike the Symfony validator, a non-string is not an exception: Yii's validators report wrong
   input types as errors (`StringValidator` does), and request data can be arrays.
-- No class name reaches a validation message: params are only `{attribute}` (the label) and `{value}` (the input).
+- No class name reaches a validation message. Yii fills `{attribute}` (the label) and `{value}` (the input) itself;
+  the README tells users not to use `{value}` (it repeats the input, O3). The validator was left unchanged (no
+  `'value' => ''` override): the ruling asked only for the README change.
 - Default message `BaseYii::t('yii', '{attribute} is invalid.')` — that string is in Yii's own message catalogue,
   so it is translated in every bundled language.
 - `clientValidateAttribute()` is the base one, returning null: no client-side validation.
@@ -29,10 +31,13 @@
   `Internal\TypeLabel`. Nullable: `null`/`''` -> `null`; non-nullable `''`/`null` -> 404.
 - Supported but unbindable (`!supportsUntrusted()` or `isComposite()`): `LogicException` naming the parameter, present
   or absent. Only a present instance passes through before that check.
-- The mapper is resolved once per `bindActionParams()` call.
+- The mapper is resolved once per `bindActionParams()` call. The body is `Internal\ActionParamBinder::bind()`; the
+  trait only reflects the action method.
 - Mapper: `BaseYii::$container->get(ValueObjectMapper::class)`.
 
 ## Yii 2 model — `Model\ValueObjectModel`
+
+- The trait delegates to `Internal\ModelValues::one()` / `all()`, which read the model through its public API only.
 
 - `valueObject($attribute)`: `hasErrors()` -> `LogicException`; the attribute's first active `ValueObjectValidator`
   (`getActiveValidators($attribute)`, so scenario-aware) gives `valueObjectClass` and `mapper`, else the container's

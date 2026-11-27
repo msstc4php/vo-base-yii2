@@ -77,6 +77,8 @@ final class ValueObjectValidator extends Validator
     /**
      * The mapper this rule validates with: its own, else the container's, so a rule and
      * the conversion of a validated value agree.
+     *
+     * @internal used by the ValueObjectModel trait
      */
     public function resolvedMapper(): ValueObjectMapper
     {

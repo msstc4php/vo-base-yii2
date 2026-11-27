@@ -7,6 +7,7 @@ namespace MSSTC4PHP\ValueObject\Yii2\Tests\Unit\Validator;
 use BackedEnum;
 use DateTimeImmutable;
 use MSSTC4PHP\ValueObject\Contract\ValueObject;
+use MSSTC4PHP\ValueObject\Exception\InvalidValueObjectException;
 use MSSTC4PHP\ValueObject\I18n\CountryCode;
 use MSSTC4PHP\ValueObject\Identity\EmailAddress;
 use MSSTC4PHP\ValueObject\Payload\ValueObjectMapper;
@@ -16,7 +17,11 @@ use MSSTC4PHP\ValueObject\Primitive\Percentage;
 use MSSTC4PHP\ValueObject\Primitive\PositiveInt;
 use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
 use MSSTC4PHP\ValueObject\Yii2\Internal\DefaultMapper;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\AppCodecs;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Code;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\LongCode;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\ShortCode;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Size;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\SizeCodec;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Support\YiiApplication;
@@ -28,6 +33,7 @@ use PHPUnit\Framework\TestCase;
 use stdClass;
 use yii\base\DynamicModel;
 use yii\base\InvalidConfigException;
+use yii\BaseYii;
 use yii\web\View;
 
 #[UsesClass(DefaultMapper::class)]
@@ -113,8 +119,9 @@ final class ValueObjectValidatorTest extends TestCase
         self::assertSame(['Field cannot be blank.'], $model->getErrors('field'));
     }
 
-    public function testCustomMessageGetsTheAttributeAndTheValue(): void
+    public function testTheValuePlaceholderWouldRepeatTheInput(): void
     {
+        // Yii fills {value} itself, which is why the README advises against it.
         $model = $this->validate(EmailAddress::class, 'nope', ['message' => '{attribute}: "{value}" is no e-mail.']);
 
         self::assertSame(['Field: "nope" is no e-mail.'], $model->getErrors('field'));
@@ -177,6 +184,40 @@ final class ValueObjectValidatorTest extends TestCase
         $this->expectExceptionMessage($message);
 
         new ValueObjectValidator($config);
+    }
+
+    public function testTheDefaultMessageCarriesNoPartOfTheValueWhileTheCauseQuotesIt(): void
+    {
+        self::assertSame(['Field is invalid.'], $this->validate(EmailAddress::class, 'SeCrEt-7f3a')->getErrors('field'));
+
+        try {
+            new ValueObjectMapper()->fromUntrustedPayload(EmailAddress::class, 'SeCrEt-7f3a');
+            self::fail('Expected InvalidValueObjectException.');
+        } catch (InvalidValueObjectException $cause) {
+            self::assertStringContainsString('SeCrEt-7f3a', $cause->getMessage());
+        }
+    }
+
+    public function testAnAbstractClassResolvingItsConcreteClassIsValidated(): void
+    {
+        self::assertFalse($this->validate(Code::class, 'abc')->hasErrors());
+        self::assertFalse($this->validate(Code::class, 'abcdef')->hasErrors());
+        self::assertFalse($this->validate(Code::class, new LongCode('abcd'))->hasErrors());
+        self::assertSame(['Field is invalid.'], $this->validate(Code::class, 'abcdefgh')->getErrors('field'));
+        self::assertFalse($this->validate(ShortCode::class, 'abc')->hasErrors());
+        self::assertTrue($this->validate(ShortCode::class, 'abcd')->hasErrors());
+    }
+
+    public function testAProvidesCodecsSetInTheContainerReachesTheValidator(): void
+    {
+        BaseYii::$container->setSingleton(ValueObjectMapper::class, static fn (): ValueObjectMapper => new ValueObjectMapper(AppCodecs::all()));
+
+        try {
+            self::assertFalse($this->validate(Size::class, ['width' => 2, 'height' => 3])->hasErrors());
+            self::assertTrue($this->validate(Size::class, '{"width":"2"}')->hasErrors());
+        } finally {
+            BaseYii::$container->clear(ValueObjectMapper::class);
+        }
     }
 
     public function testTheClassKeyOfARuleNamesTheValidatorNotTheValueObject(): void

@@ -7,9 +7,7 @@ namespace MSSTC4PHP\ValueObject\Yii2\Model;
 use BackedEnum;
 use LogicException;
 use MSSTC4PHP\ValueObject\Contract\ValueObject;
-use MSSTC4PHP\ValueObject\Exception\InvalidValueObjectException;
-use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
-use MSSTC4PHP\ValueObject\Yii2\Validator\ValueObjectValidator;
+use MSSTC4PHP\ValueObject\Yii2\Internal\ModelValues;
 use yii\base\Model;
 
 /**
@@ -36,17 +34,7 @@ trait ValueObjectModel
      */
     public function valueObject(string $attribute, ?string $class = null): ?object
     {
-        $this->assertWithoutErrors();
-        $validator = $this->valueObjectValidatorOf($attribute);
-        if (!$validator instanceof ValueObjectValidator) {
-            throw new LogicException(\sprintf('Attribute "%s" has no %s rule in %s::rules().', $attribute, ValueObjectValidator::class, static::class));
-        }
-
-        if ($class !== null && !is_a($validator->valueObjectClass ?? '', $class, true)) {
-            throw new LogicException(\sprintf('Attribute "%s" of %s is validated as %s, not %s.', $attribute, static::class, $validator->valueObjectClass ?? 'nothing', $class));
-        }
-
-        return $this->convertAttribute($attribute, $validator);
+        return ModelValues::one($this, $attribute, $class);
     }
 
     /**
@@ -56,75 +44,6 @@ trait ValueObjectModel
      */
     public function valueObjects(): array
     {
-        $this->assertWithoutErrors();
-
-        $objects = [];
-        foreach ($this->getActiveValidators() as $validator) {
-            if (!$validator instanceof ValueObjectValidator) {
-                continue;
-            }
-
-            foreach ($validator->getAttributeNames() as $attribute) {
-                if (!\is_string($attribute)) {
-                    continue;
-                }
-
-                $objects[$attribute] = $this->convertAttribute($attribute, $validator);
-            }
-        }
-
-        return $objects;
-    }
-
-    private function assertWithoutErrors(): void
-    {
-        if ($this->hasErrors()) {
-            throw new LogicException(\sprintf('%s has validation errors: read value objects only after validate() succeeded.', static::class));
-        }
-    }
-
-    private function valueObjectValidatorOf(string $attribute): ?ValueObjectValidator
-    {
-        foreach ($this->getActiveValidators($attribute) as $validator) {
-            if ($validator instanceof ValueObjectValidator) {
-                return $validator;
-            }
-        }
-
-        return null;
-    }
-
-    private function convertAttribute(string $attribute, ValueObjectValidator $validator): ValueObject|BackedEnum|null
-    {
-        $class = $validator->valueObjectClass ?? throw new LogicException(\sprintf('The %s rule for "%s" in %s has no valueObjectClass.', ValueObjectValidator::class, $attribute, static::class));
-        // Reason: validators read the attribute the same way, which also covers getter/setter attributes.
-        // @phpstan-ignore property.dynamicName
-        $value = $this->{$attribute};
-        if ($value === null || $value === '' || $this->valueObjectRuleSkipped($validator, $attribute, $value)) {
-            return null;
-        }
-
-        if ($value instanceof $class) {
-            return $value;
-        }
-
-        $mapper = $validator->resolvedMapper();
-
-        try {
-            $payload = \is_string($value) && $mapper->isComposite($class) ? CompositeJson::decode($class, $value) : $value;
-
-            return $mapper->fromUntrustedPayload($class, $payload);
-        } catch (InvalidValueObjectException $invalid) {
-            throw new LogicException(\sprintf('Attribute "%s" of %s does not hold a valid value: was validate() called?', $attribute, static::class), 0, $invalid);
-        }
-    }
-
-    private function valueObjectRuleSkipped(ValueObjectValidator $validator, string $attribute, mixed $value): bool
-    {
-        if ($validator->skipOnEmpty && $validator->isEmpty($value)) {
-            return true;
-        }
-
-        return $validator->when !== null && !(bool) \call_user_func($validator->when, $this, $attribute);
+        return ModelValues::all($this);
     }
 }

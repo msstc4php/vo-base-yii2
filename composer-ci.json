@@ -21,7 +21,7 @@
     ],
     "require": {
         "php": ">=8.4",
-        "msstc4php/vo-base": "^1.1",
+        "msstc4php/vo-base": "^1.4",
         "yiisoft/yii2": "^2.0.55"
     },
     "require-dev": {

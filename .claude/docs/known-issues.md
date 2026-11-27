@@ -112,7 +112,7 @@ never runs after it), applies a declared default, and sets an absent nullable on
 
 `StrictArrayParamDimFetchRector` types a parameter that is used as `$params[$name]`; `web\Controller::bindActionParams()`
 has no native parameter types, so `array $params` is an incompatible override (fatal at load). The trait keeps the
-parameters untyped and does the array work in a private static helper with a typed signature.
+parameters untyped and does the array work in `Internal\ActionParamBinder::bind()`, which has a typed signature.
 
 ## Every invalid action parameter is a 404
 
@@ -128,7 +128,7 @@ as does one whose `when` is false. `ValueObjectModel` therefore returns `null` f
 ## One mapper source
 
 The validator falls back to `Yii::$container->get(ValueObjectMapper::class)` (0.1.0 used a private static default) and
-exposes `resolvedMapper()`; the model trait uses it, so rule and conversion share one mapper. A container singleton
+exposes `resolvedMapper()` (`@internal` since 1.0); the model trait (through `Internal\ModelValues`) uses it, so rule and conversion share one mapper. A container singleton
 overrides the codecs for all three entry points.
 
 ## Local quirks
@@ -140,3 +140,18 @@ overrides the codecs for all three entry points.
 - Since 0.3.0 the default mapper is `Yii::$container->get(ValueObjectMapper::class)` when `has()` is true
   (`Internal\DefaultMapper`); a non-mapper definition is a `LogicException`, no definition falls back to one shared
   `new ValueObjectMapper()`.
+
+## Roave BC check against v0.3.0
+
+The first 1.0.0 run against v0.3.0 WILL be red (exit 3) with exactly one entry: `ValueObjectValidator#resolvedMapper()`
+"was marked @internal" (Roave 8.27's `ExcludeInternalMethod` looks only at the from-method, and `FunctionBecameInternal`
+reports the new tag). It is listed in the CHANGELOG "Upgrading from 0.x" and clears once v1.0.0 is the base tag. Not
+reported: the trait helpers moved to `Internal\` (private methods are not checked), the `@internal` removed from
+`dehydrate()` (the from-method was internal, so it is skipped), `DefaultMapper`'s private constructor (the from-class
+was `@internal`) and the new `Internal\` classes. Keep `src/` free of `new` initializers in signatures (a changed
+`new` default counts as a break). Not run locally (the VCS repository needs GitHub authentication).
+
+## `tests/Integration` stays
+
+It holds only `.gitkeep`, but the template `phpunit.xml.dist` (frozen) declares the `integration` suite on that
+directory, and with `failOnWarning` a missing suite directory would fail the run.

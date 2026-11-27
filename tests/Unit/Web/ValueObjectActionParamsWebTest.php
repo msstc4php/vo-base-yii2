@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace MSSTC4PHP\ValueObject\Yii2\Tests\Unit\Web;
 
+use MSSTC4PHP\ValueObject\Yii2\Internal\ActionParamBinder;
 use MSSTC4PHP\ValueObject\Yii2\Internal\DefaultMapper;
+use MSSTC4PHP\ValueObject\Yii2\Internal\ModelValues;
 use MSSTC4PHP\ValueObject\Yii2\Internal\TypeLabel;
 use MSSTC4PHP\ValueObject\Yii2\Model\ValueObjectModel;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Web\BodyErrorHandler;
@@ -14,6 +16,7 @@ use MSSTC4PHP\ValueObject\Yii2\Validator\ValueObjectValidator;
 use MSSTC4PHP\ValueObject\Yii2\Web\ValueObjectActionParams;
 use PHPUnit\Framework\Attributes\After;
 use PHPUnit\Framework\Attributes\Before;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\Attributes\UsesTrait;
@@ -25,10 +28,12 @@ use yii\web\Request;
 use yii\web\Response;
 
 #[CoversTrait(ValueObjectActionParams::class)]
+#[CoversClass(ActionParamBinder::class)]
 #[UsesClass(DefaultMapper::class)]
 #[UsesClass(TypeLabel::class)]
 #[UsesTrait(ValueObjectModel::class)]
 #[UsesClass(ValueObjectValidator::class)]
+#[UsesClass(ModelValues::class)]
 final class ValueObjectActionParamsWebTest extends TestCase
 {
     use YiiApplication;

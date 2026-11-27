@@ -18,6 +18,10 @@ final class DefaultMapper
 {
     private static ?ValueObjectMapper $fallback = null;
 
+    private function __construct()
+    {
+    }
+
     /**
      * @throws LogicException when the container's definition builds something else than a ValueObjectMapper
      */

@@ -7,8 +7,10 @@ namespace MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Web;
 use MSSTC4PHP\ValueObject\Identity\EmailAddress;
 use MSSTC4PHP\ValueObject\Primitive\BoundedString;
 use MSSTC4PHP\ValueObject\Primitive\IntRange;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Code;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Level;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Size;
 use MSSTC4PHP\ValueObject\Yii2\Web\ValueObjectActionParams;
 use Override;
 use stdClass;
@@ -97,5 +99,15 @@ final class ProfileController extends Controller
     public function actionInjected(EmailAddress $email, stdClass $service): stdClass
     {
         return $service;
+    }
+
+    public function actionCode(Code $code): Code
+    {
+        return $code;
+    }
+
+    public function actionSize(Size $size): Size
+    {
+        return $size;
     }
 }

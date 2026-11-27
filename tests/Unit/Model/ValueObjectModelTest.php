@@ -5,26 +5,35 @@ declare(strict_types=1);
 namespace MSSTC4PHP\ValueObject\Yii2\Tests\Unit\Model;
 
 use LogicException;
+use MSSTC4PHP\ValueObject\Exception\InvalidValueObjectException;
 use MSSTC4PHP\ValueObject\Identity\EmailAddress;
 use MSSTC4PHP\ValueObject\Payload\ValueObjectMapper;
 use MSSTC4PHP\ValueObject\Primitive\IntRange;
 use MSSTC4PHP\ValueObject\Yii2\Internal\CompositeJson;
 use MSSTC4PHP\ValueObject\Yii2\Internal\DefaultMapper;
+use MSSTC4PHP\ValueObject\Yii2\Internal\ModelValues;
 use MSSTC4PHP\ValueObject\Yii2\Model\ValueObjectModel;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\AppCodecs;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Code;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\CodeForm;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\ConditionalForm;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\ContactForm;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\LongCode;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\ShortCode;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Size;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\SizeCodec;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\SizeForm;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Support\YiiApplication;
 use MSSTC4PHP\ValueObject\Yii2\Validator\ValueObjectValidator;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use yii\BaseYii;
 
 #[CoversTrait(ValueObjectModel::class)]
+#[CoversClass(ModelValues::class)]
 #[UsesClass(DefaultMapper::class)]
 #[UsesClass(ValueObjectValidator::class)]
 #[UsesClass(CompositeJson::class)]
@@ -119,6 +128,7 @@ final class ValueObjectModelTest extends TestCase
         $form->validate();
 
         $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('has validation errors');
         $form->valueObjects();
     }
 
@@ -139,6 +149,71 @@ final class ValueObjectModelTest extends TestCase
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('validate()');
         $form->valueObject('email');
+    }
+
+    public function testTheLogicExceptionCarriesNoPartOfTheValueWhileTheCauseQuotesIt(): void
+    {
+        $form = new ContactForm();
+        $form->load(['email' => 'SeCrEt-7f3a'], '');
+
+        try {
+            $form->valueObject('email');
+            self::fail('Expected LogicException.');
+        } catch (LogicException $error) {
+            self::assertSame('Attribute "email" of ' . ContactForm::class . ' does not hold a valid value: was validate() called?', $error->getMessage());
+            self::assertInstanceOf(InvalidValueObjectException::class, $error->getPrevious());
+            self::assertStringContainsString('SeCrEt-7f3a', $error->getPrevious()->getMessage());
+        }
+    }
+
+    public function testTheErrorsLogicExceptionHasNoPrevious(): void
+    {
+        $form = new ContactForm();
+        $form->load(['email' => 'nope'], '');
+        self::assertFalse($form->validate());
+
+        try {
+            $form->valueObject('email');
+            self::fail('Expected LogicException.');
+        } catch (LogicException $error) {
+            self::assertNull($error->getPrevious());
+        }
+    }
+
+    public function testAnAbstractClassResolvingItsConcreteClassIsConverted(): void
+    {
+        foreach (['abc' => ShortCode::class, 'abcdef' => LongCode::class] as $value => $concrete) {
+            $form = new CodeForm();
+            $form->code = $value;
+            self::assertTrue($form->validate());
+
+            $code = $form->valueObject('code', Code::class);
+            self::assertInstanceOf($concrete, $code);
+            self::assertSame($value, (string) $code);
+        }
+
+        $form = new CodeForm();
+        $form->code = 'abcdefgh';
+        self::assertFalse($form->validate());
+
+        $form = new CodeForm();
+        $form->code = 'abcd';
+        self::assertTrue($form->validate());
+        self::assertEquals(['code' => new LongCode('abcd')], $form->valueObjects());
+    }
+
+    public function testAProvidesCodecsSetInTheContainerReachesTheModel(): void
+    {
+        BaseYii::$container->setSingleton(ValueObjectMapper::class, static fn (): ValueObjectMapper => new ValueObjectMapper(AppCodecs::all()));
+        try {
+            $form = new SizeForm();
+            $form->size = '{"width":1,"height":2}';
+            self::assertTrue($form->validate());
+
+            self::assertEquals(new Size(1, 2), $form->valueObject('size'));
+        } finally {
+            BaseYii::$container->clear(ValueObjectMapper::class);
+        }
     }
 
     public function testEmptyArrayPassesValidationAndIsNull(): void
@@ -211,7 +286,7 @@ final class ValueObjectModelTest extends TestCase
         $form = $this->validForm(['email' => 'user@example.com']);
 
         $this->expectException(LogicException::class);
-        $this->expectExceptionMessage('not');
+        $this->expectExceptionMessage('is validated as ' . EmailAddress::class . ', not ' . IntRange::class . '.');
         $form->valueObject('email', IntRange::class);
     }
 

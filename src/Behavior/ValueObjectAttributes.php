@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MSSTC4PHP\ValueObject\Yii2\Behavior;
 
+use MSSTC4PHP\ValueObject\Yii2\Internal\RecordBehaviors;
 use Override;
 use Throwable;
 use yii\db\BaseActiveRecord;
@@ -29,7 +30,7 @@ trait ValueObjectAttributes
         try {
             return parent::insert($runValidation, $attributes);
         } finally {
-            $this->restoreValueObjects();
+            RecordBehaviors::hydrate($this);
         }
     }
 
@@ -45,7 +46,7 @@ trait ValueObjectAttributes
         try {
             return parent::update($runValidation, $attributeNames);
         } finally {
-            $this->restoreValueObjects();
+            RecordBehaviors::hydrate($this);
         }
     }
 
@@ -71,28 +72,11 @@ trait ValueObjectAttributes
         }
 
         try {
-            foreach ($this->valueObjectBehaviors() as $behavior) {
-                $behavior->dehydrate();
-            }
+            RecordBehaviors::dehydrate($this);
 
             return parent::updateAttributes($names);
         } finally {
-            $this->restoreValueObjects();
+            RecordBehaviors::hydrate($this);
         }
-    }
-
-    private function restoreValueObjects(): void
-    {
-        foreach ($this->valueObjectBehaviors() as $behavior) {
-            $behavior->hydrate();
-        }
-    }
-
-    /**
-     * @return list<ValueObjectAttributeBehavior>
-     */
-    private function valueObjectBehaviors(): array
-    {
-        return array_values(array_filter($this->getBehaviors(), static fn (object $behavior): bool => $behavior instanceof ValueObjectAttributeBehavior));
     }
 }

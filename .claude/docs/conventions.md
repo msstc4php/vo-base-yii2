@@ -4,7 +4,13 @@
 
 Misconfiguration is `yii\base\InvalidConfigException` (Yii-idiomatic; built-in validators do the same), not the
 mapper's `LogicException`: support is checked before the mapper is ever called with the class, so the mapper's
-`LogicException` cannot surface. Input errors are the core's `InvalidValueObjectException` family, unwrapped.
+`LogicException` cannot surface. Input errors are the core's `InvalidValueObjectException` family, unwrapped. The `InvalidConfigException`
+(validator, behavior) / `LogicException` (traits, `DefaultMapper`) split is frozen for 1.x (O9, README BC section).
+
+## Traits
+
+A trait holds only public or overriding methods; their bodies live in `Internal\` static classes with a private
+constructor. A private trait method would be replaced, silently, by a user method of the same name.
 
 ## `BaseYii`, not `Yii`
 
@@ -27,6 +33,16 @@ autoloadable (an application requires it from its entry script), so PHPStan cann
   is fast enough for that suite. `tests/Integration` is empty, as in the Doctrine package.
 - "No UPDATE issued" is asserted through `update()` returning 0: `updateInternal()` returns 0 only when no dirty
   attributes remain (an UPDATE on SQLite reports 1 matched row even when nothing changed).
+
+## Fixtures for the 1.4 core features
+
+`Code` (abstract, `ResolvesConcreteClass`; `ShortCode` up to three letters, `LongCode` four to six) goes through the
+validator, `CodeForm` (model trait), `CodeProfile` (the `profile` table with `name` => `Code`, trait included) and
+`ProfileController::actionCode()`. `AppCodecs` (`ProvidesCodecs` -> `SizeCodec`) is set as the container singleton
+in one test per component; for the action parameters it shows up as the composite `LogicException` on
+`actionSize(Size)` (without it Size is not a value-object parameter at all). Redaction tests use the marker
+`SeCrEt-7f3a`: the bridge's message is asserted exactly and the previous (or the mapper's own exception) quotes it;
+paths documented without a previous assert `getPrevious()` is null.
 
 ## Web and model tests
 

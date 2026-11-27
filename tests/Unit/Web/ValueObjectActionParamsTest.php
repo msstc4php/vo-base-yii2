@@ -7,11 +7,16 @@ namespace MSSTC4PHP\ValueObject\Yii2\Tests\Unit\Web;
 use LogicException;
 use MSSTC4PHP\ValueObject\Exception\InvalidValueObjectException;
 use MSSTC4PHP\ValueObject\Identity\EmailAddress;
+use MSSTC4PHP\ValueObject\Payload\ValueObjectMapper;
 use MSSTC4PHP\ValueObject\Primitive\IntRange;
+use MSSTC4PHP\ValueObject\Yii2\Internal\ActionParamBinder;
 use MSSTC4PHP\ValueObject\Yii2\Internal\DefaultMapper;
 use MSSTC4PHP\ValueObject\Yii2\Internal\TypeLabel;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\AppCodecs;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Level;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\LongCode;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Priority;
+use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\ShortCode;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Fixture\Web\ProfileController;
 use MSSTC4PHP\ValueObject\Yii2\Tests\Support\YiiApplication;
 use MSSTC4PHP\ValueObject\Yii2\Web\ValueObjectActionParams;
@@ -26,6 +31,7 @@ use yii\web\BadRequestHttpException;
 use yii\web\NotFoundHttpException;
 
 #[CoversTrait(ValueObjectActionParams::class)]
+#[CoversClass(ActionParamBinder::class)]
 #[UsesClass(DefaultMapper::class)]
 #[CoversClass(TypeLabel::class)]
 final class ValueObjectActionParamsTest extends TestCase
@@ -87,6 +93,72 @@ final class ValueObjectActionParamsTest extends TestCase
             self::assertStringContainsString('email address', $notFound->getMessage());
             self::assertStringNotContainsString('EmailAddress', $notFound->getMessage());
             self::assertStringNotContainsString('\\', $notFound->getMessage());
+        }
+    }
+
+    public function testTheMessageCarriesNoPartOfTheValueWhileTheCauseQuotesIt(): void
+    {
+        try {
+            $this->runOn('view', ['email' => 'SeCrEt-7f3a']);
+            self::fail('Expected NotFoundHttpException.');
+        } catch (NotFoundHttpException $notFound) {
+            self::assertSame('The "email" parameter is not a valid email address.', $notFound->getMessage());
+            self::assertInstanceOf(InvalidValueObjectException::class, $notFound->getPrevious());
+            self::assertStringContainsString('SeCrEt-7f3a', $notFound->getPrevious()->getMessage());
+        }
+    }
+
+    public function testAnEmptyNonNullableParameterIsNotFoundWithoutPrevious(): void
+    {
+        try {
+            $this->runOn('view', ['email' => '']);
+            self::fail('Expected NotFoundHttpException.');
+        } catch (NotFoundHttpException $notFound) {
+            self::assertSame('The "email" parameter is not a valid email address.', $notFound->getMessage());
+            self::assertNull($notFound->getPrevious());
+        }
+    }
+
+    public function testAMissingParameterIsABadRequestWithoutPrevious(): void
+    {
+        try {
+            $this->runOn('view', []);
+            self::fail('Expected BadRequestHttpException.');
+        } catch (BadRequestHttpException $badRequest) {
+            self::assertNull($badRequest->getPrevious());
+        }
+    }
+
+    public function testAnAbstractClassResolvingItsConcreteClassIsBound(): void
+    {
+        $short = $this->runOn('code', ['code' => 'abc']);
+        $long = $this->runOn('code', ['code' => 'abcdef']);
+
+        self::assertInstanceOf(ShortCode::class, $short);
+        self::assertInstanceOf(LongCode::class, $long);
+        self::assertSame('abcdef', (string) $long);
+
+        try {
+            $this->runOn('code', ['code' => 'abcdefgh']);
+            self::fail('Expected NotFoundHttpException.');
+        } catch (NotFoundHttpException $notFound) {
+            self::assertSame('The "code" parameter is not a valid code.', $notFound->getMessage());
+        }
+    }
+
+    public function testAProvidesCodecsSetInTheContainerReachesTheBinder(): void
+    {
+        BaseYii::$container->setSingleton(ValueObjectMapper::class, static fn (): ValueObjectMapper => new ValueObjectMapper(AppCodecs::all()));
+
+        try {
+            $this->runOn('size', ['size' => '{"width":1,"height":2}']);
+            self::fail('Expected LogicException.');
+        } catch (LogicException $error) {
+            // Only a mapper that knows Size makes it a value-object parameter, and a composite one.
+            self::assertStringContainsString('$size cannot be typed', $error->getMessage());
+            self::assertStringContainsString('composite', $error->getMessage());
+        } finally {
+            BaseYii::$container->clear(ValueObjectMapper::class);
         }
     }
 

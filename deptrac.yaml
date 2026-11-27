@@ -4,8 +4,21 @@ deptrac:
   layers:
     - name: Internal
       collectors:
-        - type: directory
-          value: src/Internal/.*
+        - type: bool
+          must:
+            - type: directory
+              value: src/Internal/.*
+          must_not:
+            - type: classLike
+              value: ^MSSTC4PHP\\ValueObject\\Yii2\\Internal\\(ModelValues|RecordBehaviors)$
+    - name: ModelInternal
+      collectors:
+        - type: classLike
+          value: ^MSSTC4PHP\\ValueObject\\Yii2\\Internal\\ModelValues$
+    - name: BehaviorInternal
+      collectors:
+        - type: classLike
+          value: ^MSSTC4PHP\\ValueObject\\Yii2\\Internal\\RecordBehaviors$
     - name: Validator
       collectors:
         - type: directory
@@ -26,14 +39,23 @@ deptrac:
     # The core and Yii are not declared as layers. The validator (request input)
     # and the behavior (storage) never see each other; Internal holds what they
     # must agree on (the JSON form of a composite, the client-facing type label).
-    # Model reads what the validator rule declares.
+    # Model reads what the validator rule declares. ModelInternal and
+    # BehaviorInternal hold the bodies of the Model and Behavior traits, so they
+    # see only their own area.
     Internal: ~
+    ModelInternal:
+      - Internal
+      - Validator
+    BehaviorInternal:
+      - Behavior
     Validator:
       - Internal
     Behavior:
       - Internal
+      - BehaviorInternal
     Web:
       - Internal
     Model:
       - Internal
+      - ModelInternal
       - Validator

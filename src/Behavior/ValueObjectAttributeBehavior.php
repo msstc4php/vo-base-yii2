@@ -27,7 +27,8 @@ use yii\db\BaseActiveRecord;
  * save() and compares payloads, by value, inside it.
  *
  * A failed or vetoed save never reaches afterSave: use the ValueObjectAttributes
- * trait on the model, or call hydrate() yourself.
+ * trait on the model, or call hydrate() yourself. dehydrate() and hydrate() are the
+ * public pair for writes that skip the save events.
  *
  * A composite is stored as JSON text, or as an array for a column Yii itself
  * maps to an array (a JSON column on MySQL or PostgreSQL).
@@ -140,7 +141,10 @@ final class ValueObjectAttributeBehavior extends Behavior
      * canonicalised on the way, and refused for a class whose payload carries its
      * own constraints (BoundedString).
      *
-     * @internal event handler
+     * Runs before insert and update. Call it yourself, with hydrate() afterwards,
+     * around a write that skips the save events (updateAttributes() on a model
+     * without the ValueObjectAttributes trait, updateAll()). Starts with hydrate(),
+     * so it can be called again after a vetoed save.
      *
      * @throws InvalidValueObjectException when a raw value is not a valid value object or a payload cannot be encoded
      * @throws InvalidConfigException when a mapped name is not an attribute of the model
