@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.0] - unreleased
+## [1.0.0] - 2026-11-27
 
 First stable release: from here on a breaking change needs 2.0. What 1.x covers is listed in the README,
 "Backward compatibility": the validator, the behavior and the three traits with their public methods, the option
