@@ -168,7 +168,7 @@ final class ValueObjectActionParamsTest extends TestCase
     {
         $trait = new ReflectionClass(ValueObjectActionParams::class);
 
-        self::assertSame(['bindActionParams'], array_map(static fn (ReflectionMethod $method): string => $method->getName(), $trait->getMethods()));
+        self::assertEqualsCanonicalizing(['bindActionParams'], array_map(static fn (ReflectionMethod $method): string => $method->getName(), $trait->getMethods()));
         self::assertSame([], $trait->getProperties());
         self::assertSame([], $trait->getReflectionConstants());
     }

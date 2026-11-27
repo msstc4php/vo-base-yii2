@@ -459,7 +459,7 @@ final class ValueObjectAttributeBehaviorTest extends TestCase
     {
         $trait = new ReflectionClass(ValueObjectAttributes::class);
 
-        self::assertSame(['insert', 'update', 'updateAttributes'], array_map(static fn (ReflectionMethod $method): string => $method->getName(), $trait->getMethods()));
+        self::assertEqualsCanonicalizing(['insert', 'update', 'updateAttributes'], array_map(static fn (ReflectionMethod $method): string => $method->getName(), $trait->getMethods()));
         self::assertSame([], $trait->getProperties());
         self::assertSame([], $trait->getReflectionConstants());
     }

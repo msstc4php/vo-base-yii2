@@ -333,7 +333,7 @@ final class ValueObjectModelTest extends TestCase
     {
         $trait = new ReflectionClass(ValueObjectModel::class);
 
-        self::assertSame(['valueObject', 'valueObjects'], array_map(static fn (ReflectionMethod $method): string => $method->getName(), $trait->getMethods()));
+        self::assertEqualsCanonicalizing(['valueObject', 'valueObjects'], array_map(static fn (ReflectionMethod $method): string => $method->getName(), $trait->getMethods()));
         self::assertSame([], $trait->getProperties());
         self::assertSame([], $trait->getReflectionConstants());
     }
